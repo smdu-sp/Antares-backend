@@ -7,87 +7,65 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// Enum: Permissões de acesso dos usuários no sistema - Define os níveis de permissão para controle de acesso às funcionalidades
 enum Permissao {
-  DEV
-  ADM
-  TEC
-  USR
+  DEV // Desenvolvedor: Acesso total ao sistema, incluindo configurações e desenvolvimento
+  ADM // Administrador: Acesso administrativo completo, pode gerenciar usuários e processos
+  TEC // Técnico: Pode criar e gerenciar processos e andamentos
+  USR // Usuário: Acesso básico, apenas visualização de processos e andamentos
 }
 
-enum StatusAgendamento {
-  AGENDADO
-  CANCELADO
-  CONCLUIDO
+// Enum: Status do andamento do processo - Indica em qual situação se encontra o andamento do processo
+enum StatusAndamento {
+  EM_ANDAMENTO // Processo está em tramitação, aguardando retorno
+  CONCLUIDO // Processo foi concluído e retornado à unidade de origem
+  PRORROGADO // Prazo foi prorrogado, nova data limite definida
 }
 
+// Model: Usuario | Tabela: usuarios | Descrição: Armazena informações dos usuários do sistema (servidores da secretaria)
 model Usuario {
-  id            String    @id @default(uuid())
-  nome          String
-  nomeSocial    String?
-  login         String    @unique
-  email         String    @unique
-  permissao     Permissao @default(USR)
-  status        Boolean   @default(true)
-  avatar        String?   @db.Text
+  id         String    @id @default(uuid()) // ID único do usuário (UUID gerado automaticamente) - Chave primária
+  nome       String // Nome completo do usuário - Obrigatório - Exemplo: "João da Silva"
+  nomeSocial String? // Nome social do usuário (opcional) - Nome pelo qual o usuário prefere ser chamado
+  login      String    @unique // Login do usuário para acesso ao sistema - Obrigatório - Único - Exemplo: "joao.silva"
+  email      String    @unique // E-mail do usuário - Obrigatório - Único - Deve ser um e-mail válido - Exemplo: "joao.silva@prefeitura.gov.br"
+  permissao  Permissao @default(USR) // Permissão de acesso do usuário no sistema - Enum (Permissao) - Valor padrão: USR - Valores: DEV, ADM, TEC, USR
+  status     Boolean   @default(true) // Status ativo/inativo do usuário - Boolean - Valor padrão: true (ativo) - false = usuário desativado, não pode acessar o sistema
+  avatar     String?   @db.Text // URL ou caminho da imagem de avatar do usuário - String (TEXT no banco) - Opcional - Armazena URL ou base64 da foto
 
-  ultimoLogin   DateTime  @default(now())
-  criadoEm      DateTime  @default(now())
-  atualizadoEm  DateTime  @default(now()) @updatedAt
-
-  agendamentos  Agendamento[]
+  ultimoLogin  DateTime @default(now()) // Data e hora do último login do usuário no sistema - DateTime - Valor padrão: Data/hora atual (atualizado a cada login)
+  criadoEm     DateTime @default(now()) // Data e hora de criação do registro do usuário - DateTime - Valor padrão: Data/hora atual (definido apenas na criação)
+  atualizadoEm DateTime @default(now()) @updatedAt // Data e hora da última atualização do registro - DateTime - Atualizado automaticamente a cada modificação
 
   @@map("usuarios")
 }
 
-model Agendamento {
-  id              String            @id @default(uuid())
-  municipe        String?
-  rg              String?
-  cpf             String?
-  processo        String?
-  dataInicio      DateTime
-  dataFim         DateTime
-  importado       Boolean           @default(false)
-  legado          Boolean           @default(false)
-  resumo          String?           @db.Text
-  motivoId        String?
-  coordenadoriaId String?
-  tecnicoId       String?
-  email           String?
-  status          StatusAgendamento @default(AGENDADO)
+// Model: processo | Tabela: processos | Descrição: Armazena informações dos processos administrativos que são controlados pelo sistema
+model processo {
+  id           String      @id @default(uuid()) // ID único do processo (UUID gerado automaticamente) - Chave primária
+  numero_sei   String      @unique // Número SEI (Sistema Eletrônico de Informações) do processo - String - Obrigatório - Único - Número único que identifica o processo no sistema SEI - Exemplo: "1234567"
+  assunto      String // Assunto do processo - String - Obrigatório - Descrição resumida do que trata o processo - Exemplo: "Solicitação de licença para obra"
+  criadoEm     DateTime    @default(now()) // Data e hora de criação do registro do processo - DateTime - Valor padrão: Data/hora atual (definido apenas na criação)
+  atualizadoEm DateTime    @default(now()) @updatedAt // Data e hora da última atualização do registro - DateTime - Atualizado automaticamente a cada modificação
+  andamentos   andamento[] // Lista de andamentos relacionados a este processo - Array de andamento - Histórico completo de movimentações do processo entre unidades
 
-  criadoEm        DateTime          @default(now())
-  atualizadoEm    DateTime          @default(now()) @updatedAt
-
-  motivo          Motivo?           @relation(fields: [motivoId], references: [id], onDelete: NoAction)
-  coordenadoria   Coordenadoria?    @relation(fields: [coordenadoriaId], references: [id], onDelete: NoAction)
-  tecnico         Usuario?          @relation(fields: [tecnicoId], references: [id], onDelete: NoAction)
-
-  @@map("agendamentos")
+  @@map("processos")
 }
 
-model Motivo {
-  id              String          @id @default(uuid())
-  texto           String          @unique
-  status          Boolean         @default(true)
+// Model: andamento | Tabela: andamentos | Descrição: Armazena o histórico de movimentações dos processos entre unidades, controlando prazos e status
+model andamento {
+  id           String          @id @default(uuid()) // ID único do andamento (UUID gerado automaticamente) - Chave primária
+  origem       String // Unidade de origem (de onde o processo está saindo) - String - Obrigatório - Nome ou sigla da unidade que está enviando o processo - Exemplo: "EXPEDIENTE", "COORDENADORIA_JURIDICA"
+  destino      String // Unidade de destino (para onde o processo está indo) - String - Obrigatório - Nome ou sigla da unidade que receberá o processo - Exemplo: "COORDENADORIA_JURIDICA", "GABINETE"
+  prazo        DateTime        @default(now()) // Data limite para retorno do processo à unidade de origem - DateTime - Obrigatório - Valor padrão: Data/hora atual (deve ser ajustado ao criar) - Data até a qual o processo deve ser retornado. Se não retornado até esta data, está em atraso
+  prorrogacao  DateTime? // Nova data limite caso o processo tenha sido prorrogado - DateTime (opcional) - Se preenchido, indica que o prazo foi prorrogado e esta é a nova data limite - Observação: Quando preenchido, o status deve ser alterado para PRORROGADO
+  conclusao    DateTime? // Data em que o processo foi concluído e retornado à unidade de origem - DateTime (opcional) - Data em que o processo foi finalizado e devolvido. Se preenchido, o status deve ser CONCLUIDO
+  status       StatusAndamento @default(EM_ANDAMENTO) // Status atual do andamento - Enum (StatusAndamento) - Valor padrão: EM_ANDAMENTO - Valores: EM_ANDAMENTO (em tramitação), CONCLUIDO (concluído e retornado), PRORROGADO (prazo prorrogado)
+  observacao   String? // Observações sobre o andamento - String (opcional) - Campo livre para anotações, justificativas de prorrogação, ou outras informações relevantes
+  criadoEm     DateTime        @default(now()) // Data e hora de criação do registro do andamento - DateTime - Valor padrão: Data/hora atual (definido apenas na criação) - Representa a data em que o processo foi enviado da origem para o destino
+  atualizadoEm DateTime        @default(now()) @updatedAt // Data e hora da última atualização do registro - DateTime - Atualizado automaticamente a cada modificação
+  processo_id  String // ID do processo relacionado (chave estrangeira) - String (UUID) - Obrigatório - Referência ao processo ao qual este andamento pertence
+  processo     processo        @relation(fields: [processo_id], references: [id]) // Relacionamento com o modelo processo - Processo ao qual este andamento está vinculado
 
-  criadoEm        DateTime        @default(now())
-  atualizadoEm    DateTime        @default(now()) @updatedAt
-
-  agendamentos    Agendamento[]
-
-  @@map("motivos")
-}
-
-model Coordenadoria {
-  id            String   @id @default(uuid())
-  sigla         String   @unique
-  status        Boolean  @default(true)
-
-  criadoEm      DateTime @default(now())
-  atualizadoEm  DateTime @default(now()) @updatedAt
-
-  agendamentos    Agendamento[]
-
-  @@map("coordenadorias")
+  @@map("andamentos")
 }
