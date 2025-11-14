@@ -76,8 +76,37 @@ export class ProcessosController {
     @Query('busca') busca?: string,
     @Query('vencendoHoje') vencendoHoje?: string,
     @Query('atrasados') atrasados?: string,
+    @UsuarioAtual() usuario?: Usuario,
   ): Promise<ProcessoPaginadoResponseDto> {
-    return this.processosService.buscarTudo(+pagina, +limite, busca, vencendoHoje === 'true', atrasados === 'true');
+    return this.processosService.buscarTudo(+pagina, +limite, busca, vencendoHoje === 'true', atrasados === 'true', usuario?.id);
+  }
+
+  /**
+   * GET /processos/contar/vencendo-hoje
+   * Conta processos vencendo hoje
+   */
+  @Permissoes('ADM', 'TEC', 'USR')
+  @Get('contar/vencendo-hoje')
+  @ApiOperation({ summary: 'Conta processos vencendo hoje' })
+  @ApiResponse({ status: 200, description: 'Número de processos vencendo hoje' })
+  contarVencendoHoje(
+    @UsuarioAtual() usuario?: Usuario,
+  ): Promise<{ total: number }> {
+    return this.processosService.contarVencendoHoje(usuario?.id).then(total => ({ total }));
+  }
+
+  /**
+   * GET /processos/contar/atrasados
+   * Conta processos atrasados
+   */
+  @Permissoes('ADM', 'TEC', 'USR')
+  @Get('contar/atrasados')
+  @ApiOperation({ summary: 'Conta processos atrasados' })
+  @ApiResponse({ status: 200, description: 'Número de processos atrasados' })
+  contarAtrasados(
+    @UsuarioAtual() usuario?: Usuario,
+  ): Promise<{ total: number }> {
+    return this.processosService.contarAtrasados(usuario?.id).then(total => ({ total }));
   }
 
   /**
@@ -92,8 +121,11 @@ export class ProcessosController {
   @ApiOperation({ summary: 'Busca um processo por ID' })
   @ApiResponse({ status: 200, description: 'Processo encontrado', type: ProcessoResponseDto })
   @ApiResponse({ status: 404, description: 'Processo não encontrado' })
-  buscarPorId(@Param('id') id: string): Promise<ProcessoResponseDto> {
-    return this.processosService.buscarPorId(id);
+  buscarPorId(
+    @Param('id') id: string,
+    @UsuarioAtual() usuario?: Usuario,
+  ): Promise<ProcessoResponseDto> {
+    return this.processosService.buscarPorId(id, usuario?.id);
   }
 
   /**
@@ -108,8 +140,11 @@ export class ProcessosController {
   @ApiOperation({ summary: 'Busca um processo por número SEI' })
   @ApiResponse({ status: 200, description: 'Processo encontrado', type: ProcessoResponseDto })
   @ApiResponse({ status: 404, description: 'Processo não encontrado' })
-  buscarPorNumeroSei(@Param('numero_sei') numero_sei: string): Promise<ProcessoResponseDto> {
-    return this.processosService.buscarPorNumeroSei(numero_sei);
+  buscarPorNumeroSei(
+    @Param('numero_sei') numero_sei: string,
+    @UsuarioAtual() usuario?: Usuario,
+  ): Promise<ProcessoResponseDto> {
+    return this.processosService.buscarPorNumeroSei(numero_sei, usuario?.id);
   }
 
   /**

@@ -47,6 +47,15 @@ export class UsuariosService {
   async listaCompleta(): Promise<UsuarioResponseDTO[]> {
     const lista: Usuario[] = await this.prisma.usuario.findMany({
       orderBy: { nome: 'asc' },
+      include: {
+        unidade: {
+          select: {
+            id: true,
+            nome: true,
+            sigla: true,
+          },
+        },
+      },
     });
     if (!lista || lista.length == 0) throw new ForbiddenException('Nenhum usuário encontrado.');
     return lista;
@@ -70,6 +79,19 @@ export class UsuariosService {
     if (loguser) throw new ForbiddenException('Login já cadastrado.');
     const emailuser: UsuarioResponseDTO = await this.buscarPorEmail(createUsuarioDto.email);
     if (emailuser) throw new ForbiddenException('Email já cadastrado.');
+    
+    // Verifica se a unidade existe
+    if (createUsuarioDto.unidade_id) {
+      const unidade = await this.prisma.unidade.findUnique({
+        where: { id: createUsuarioDto.unidade_id },
+      });
+      if (!unidade) {
+        throw new BadRequestException('Unidade não encontrada.');
+      }
+    } else {
+      throw new BadRequestException('Unidade é obrigatória.');
+    }
+    
     let { permissao } = createUsuarioDto;
     permissao = this.validaPermissaoCriador(permissao, usuarioLogado.permissao);
     const usuario: Usuario = await this.prisma.usuario.create({
@@ -110,6 +132,15 @@ export class UsuariosService {
       orderBy: { nome: 'asc' },
       skip: (pagina - 1) * limite,
       take: limite,
+      include: {
+        unidade: {
+          select: {
+            id: true,
+            nome: true,
+            sigla: true,
+          },
+        },
+      },
     });
     return {
       total: +total,
@@ -120,7 +151,18 @@ export class UsuariosService {
   }
 
   async buscarPorId(id: string): Promise<UsuarioResponseDTO> {
-    const usuario: Usuario = await this.prisma.usuario.findUnique({ where: { id }});
+    const usuario: Usuario = await this.prisma.usuario.findUnique({ 
+      where: { id },
+      include: {
+        unidade: {
+          select: {
+            id: true,
+            nome: true,
+            sigla: true,
+          },
+        },
+      },
+    });
     return usuario;
   }
 
@@ -145,6 +187,17 @@ export class UsuariosService {
     }
     const usuarioAntes = await this.prisma.usuario.findUnique({ where: { id }});
     if (['TEC', 'USR'].includes(usuarioAntes.permissao) && id !== usuarioAntes.id) throw new ForbiddenException('Operação não autorizada para este usuário.');
+    
+    // Verifica se a unidade existe (se estiver sendo atualizada)
+    if (updateUsuarioDto.unidade_id) {
+      const unidade = await this.prisma.unidade.findUnique({
+        where: { id: updateUsuarioDto.unidade_id },
+      });
+      if (!unidade) {
+        throw new BadRequestException('Unidade não encontrada.');
+      }
+    }
+    
     let { permissao } = updateUsuarioDto;
     permissao = permissao && permissao.toString() !== '' ? this.validaPermissaoCriador(permissao, usuarioLogado.permissao) : usuarioAntes.permissao;
     const usuarioAtualizado: Usuario = await this.prisma.usuario.update({

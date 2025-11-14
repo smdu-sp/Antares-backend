@@ -34,6 +34,20 @@ enum TipoAcao {
   ANDAMENTO_REMOVIDO // Andamento foi removido do sistema
 }
 
+// Model: Unidade | Tabela: unidades | Descrição: Armazena informações das unidades organizacionais do sistema
+model Unidade {
+  id           String   @id @default(uuid()) // ID único da unidade (UUID gerado automaticamente) - Chave primária
+  nome         String   @unique // Nome completo da unidade - Obrigatório - Único - Exemplo: "Coordenadoria Jurídica"
+  sigla        String   @unique // Sigla da unidade - Obrigatório - Único - Exemplo: "COJUR"
+  criadoEm     DateTime @default(now()) // Data e hora de criação do registro da unidade - DateTime - Valor padrão: Data/hora atual (definido apenas na criação)
+  atualizadoEm DateTime @default(now()) @updatedAt // Data e hora da última atualização do registro - DateTime - Atualizado automaticamente a cada modificação
+
+  usuarios  Usuario[] // Lista de usuários pertencentes a esta unidade - Array de Usuario - Usuários vinculados à unidade
+  processos processo[] // Lista de processos cadastrados por esta unidade - Array de processo - Processos vinculados à unidade
+
+  @@map("unidades")
+}
+
 // Model: Usuario | Tabela: usuarios | Descrição: Armazena informações dos usuários do sistema (servidores da secretaria)
 model Usuario {
   id         String    @id @default(uuid()) // ID único do usuário (UUID gerado automaticamente) - Chave primária
@@ -44,6 +58,8 @@ model Usuario {
   permissao  Permissao @default(USR) // Permissão de acesso do usuário no sistema - Enum (Permissao) - Valor padrão: USR - Valores: DEV, ADM, TEC, USR
   status     Boolean   @default(true) // Status ativo/inativo do usuário - Boolean - Valor padrão: true (ativo) - false = usuário desativado, não pode acessar o sistema
   avatar     String?   @db.Text // URL ou caminho da imagem de avatar do usuário - String (TEXT no banco) - Opcional - Armazena URL ou base64 da foto
+  unidade_id String // ID da unidade à qual o usuário pertence (chave estrangeira) - String (UUID) - Obrigatório - Referência à unidade do usuário
+  unidade    Unidade   @relation(fields: [unidade_id], references: [id]) // Relacionamento com o modelo Unidade - Unidade à qual o usuário pertence
 
   ultimoLogin  DateTime @default(now()) // Data e hora do último login do usuário no sistema - DateTime - Valor padrão: Data/hora atual (atualizado a cada login)
   criadoEm     DateTime @default(now()) // Data e hora de criação do registro do usuário - DateTime - Valor padrão: Data/hora atual (definido apenas na criação)
@@ -61,6 +77,8 @@ model processo {
   id           String      @id @default(uuid()) // ID único do processo (UUID gerado automaticamente) - Chave primária
   numero_sei   String      @unique // Número SEI (Sistema Eletrônico de Informações) do processo - String - Obrigatório - Único - Número único que identifica o processo no sistema SEI - Exemplo: "1234567"
   assunto      String // Assunto do processo - String - Obrigatório - Descrição resumida do que trata o processo - Exemplo: "Solicitação de licença para obra"
+  unidade_id   String // ID da unidade que cadastrou o processo (chave estrangeira) - String (UUID) - Obrigatório - Referência à unidade responsável pelo processo
+  unidade      Unidade     @relation(fields: [unidade_id], references: [id]) // Relacionamento com o modelo Unidade - Unidade que cadastrou o processo
   criadoEm     DateTime    @default(now()) // Data e hora de criação do registro do processo - DateTime - Valor padrão: Data/hora atual (definido apenas na criação)
   atualizadoEm DateTime    @default(now()) @updatedAt // Data e hora da última atualização do registro - DateTime - Atualizado automaticamente a cada modificação
   andamentos   andamento[] // Lista de andamentos relacionados a este processo - Array de andamento - Histórico completo de movimentações do processo entre unidades

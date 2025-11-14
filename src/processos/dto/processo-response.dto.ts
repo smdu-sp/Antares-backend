@@ -17,6 +17,9 @@ export class ProcessoResponseDto implements processo {
   @ApiProperty({ description: 'Assunto do processo' })
   assunto: string;
 
+  @ApiProperty({ description: 'ID da unidade que cadastrou o processo' })
+  unidade_id: string;
+
   @ApiProperty({ description: 'Data de criação' })
   criadoEm: Date;
 

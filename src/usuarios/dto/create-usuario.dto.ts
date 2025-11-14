@@ -45,4 +45,8 @@ export class CreateUsuarioDto {
   @IsOptional()
   @IsString({ message: 'Tem de ser texto.' })
   avatar?: string;
+
+  @ApiProperty({ description: 'ID da unidade à qual o usuário pertence' })
+  @IsString({ message: 'ID da unidade deve ser texto.' })
+  unidade_id: string;
 }

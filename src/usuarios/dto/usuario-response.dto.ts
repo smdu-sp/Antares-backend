@@ -1,6 +1,15 @@
 import { ApiProperty } from "@nestjs/swagger"
 import { Permissao } from "@prisma/client"
 
+export class UnidadeResponseDTO {
+    @ApiProperty()
+    id: string
+    @ApiProperty()
+    nome: string
+    @ApiProperty()
+    sigla: string
+}
+
 export class UsuarioResponseDTO {
     @ApiProperty()
     id: string
@@ -24,6 +33,10 @@ export class UsuarioResponseDTO {
     criadoEm: Date
     @ApiProperty()
     atualizadoEm: Date
+    @ApiProperty()
+    unidade_id: string
+    @ApiProperty({ type: UnidadeResponseDTO, required: false })
+    unidade?: UnidadeResponseDTO
 }
 
 export class UsuarioPaginadoResponseDTO {

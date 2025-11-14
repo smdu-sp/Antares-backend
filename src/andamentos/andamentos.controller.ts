@@ -135,7 +135,7 @@ export class AndamentosController {
    * DELETE /andamentos/:id
    * Remove um andamento
    */
-  @Permissoes('ADM')
+  @Permissoes('DEV', 'ADM', 'TEC')
   @Delete(':id')
   @ApiOperation({ summary: 'Remove um andamento' })
   @ApiResponse({ status: 200, description: 'Andamento removido' })

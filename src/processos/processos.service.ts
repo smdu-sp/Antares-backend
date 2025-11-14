@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   InternalServerErrorException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateProcessoDto } from './dto/create-processo.dto';
@@ -41,6 +42,16 @@ export class ProcessosService {
    * @returns Processo criado
    */
   async criar(createProcessoDto: CreateProcessoDto, usuario_id: string): Promise<ProcessoResponseDto> {
+    // Busca o usuário para obter a unidade_id
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { id: usuario_id },
+      select: { unidade_id: true },
+    });
+
+    if (!usuario || !usuario.unidade_id) {
+      throw new BadRequestException('Usuário não possui unidade atribuída.');
+    }
+
     // Verifica se já existe um processo com o mesmo número SEI
     const processoExistente = await this.prisma.processo.findUnique({
       where: { numero_sei: createProcessoDto.numero_sei },
@@ -55,6 +66,7 @@ export class ProcessosService {
       data: {
         numero_sei: createProcessoDto.numero_sei,
         assunto: createProcessoDto.assunto,
+        unidade_id: usuario.unidade_id,
       },
     });
 
@@ -82,6 +94,9 @@ export class ProcessosService {
    * @param pagina - Número da página (padrão: 1)
    * @param limite - Itens por página (padrão: 10)
    * @param busca - Termo de busca (opcional)
+   * @param vencendoHoje - Filtrar processos vencendo hoje
+   * @param atrasados - Filtrar processos atrasados
+   * @param usuario_id - ID do usuário que está buscando (para filtrar por unidade)
    * @returns Lista paginada de processos
    */
   async buscarTudo(
@@ -90,9 +105,26 @@ export class ProcessosService {
     busca?: string,
     vencendoHoje: boolean = false,
     atrasados: boolean = false,
+    usuario_id?: string,
   ): Promise<ProcessoPaginadoResponseDto> {
     // Valida e ajusta página e limite usando o AppService
     [pagina, limite] = this.app.verificaPagina(pagina, limite);
+
+    // Busca o usuário para obter permissão e unidade_id
+    let unidade_id: string | undefined;
+    let permissao: string | undefined;
+    
+    if (usuario_id) {
+      const usuario = await this.prisma.usuario.findUnique({
+        where: { id: usuario_id },
+        select: { unidade_id: true, permissao: true },
+      });
+      
+      if (usuario) {
+        unidade_id = usuario.unidade_id;
+        permissao = usuario.permissao;
+      }
+    }
 
     // Calcula início e fim do dia atual (00:00:00 até 23:59:59)
     const hoje = new Date();
@@ -102,6 +134,10 @@ export class ProcessosService {
 
     // Monta os filtros de busca
     const searchParams: any = {
+      // Filtra por unidade do usuário (exceto para DEV e ADM que podem ver todos)
+      ...(unidade_id && permissao && !['DEV', 'ADM'].includes(permissao) && {
+        unidade_id: unidade_id,
+      }),
       ...(busca && {
         OR: [
           { numero_sei: { contains: busca } },
@@ -203,9 +239,10 @@ export class ProcessosService {
    * Busca um processo por ID
    * 
    * @param id - ID do processo
+   * @param usuario_id - ID do usuário que está buscando (para verificar permissão de acesso)
    * @returns Processo encontrado
    */
-  async buscarPorId(id: string): Promise<ProcessoResponseDto> {
+  async buscarPorId(id: string, usuario_id?: string): Promise<ProcessoResponseDto> {
     if (!id || id === '') {
       throw new BadRequestException('ID do processo é obrigatório.');
     }
@@ -223,6 +260,20 @@ export class ProcessosService {
       throw new NotFoundException('Processo não encontrado.');
     }
 
+    // Verifica se o usuário tem permissão para ver este processo
+    if (usuario_id) {
+      const usuario = await this.prisma.usuario.findUnique({
+        where: { id: usuario_id },
+        select: { unidade_id: true, permissao: true },
+      });
+
+      if (usuario && !['DEV', 'ADM'].includes(usuario.permissao)) {
+        if (processo.unidade_id !== usuario.unidade_id) {
+          throw new ForbiddenException('Você não tem permissão para acessar este processo.');
+        }
+      }
+    }
+
     return processo;
   }
 
@@ -230,9 +281,10 @@ export class ProcessosService {
    * Busca um processo por número SEI
    * 
    * @param numero_sei - Número SEI do processo
+   * @param usuario_id - ID do usuário que está buscando (para verificar permissão de acesso)
    * @returns Processo encontrado
    */
-  async buscarPorNumeroSei(numero_sei: string): Promise<ProcessoResponseDto> {
+  async buscarPorNumeroSei(numero_sei: string, usuario_id?: string): Promise<ProcessoResponseDto> {
     if (!numero_sei || numero_sei === '') {
       throw new BadRequestException('Número SEI é obrigatório.');
     }
@@ -248,6 +300,20 @@ export class ProcessosService {
 
     if (!processo) {
       throw new NotFoundException('Processo não encontrado.');
+    }
+
+    // Verifica se o usuário tem permissão para ver este processo
+    if (usuario_id) {
+      const usuario = await this.prisma.usuario.findUnique({
+        where: { id: usuario_id },
+        select: { unidade_id: true, permissao: true },
+      });
+
+      if (usuario && !['DEV', 'ADM'].includes(usuario.permissao)) {
+        if (processo.unidade_id !== usuario.unidade_id) {
+          throw new ForbiddenException('Você não tem permissão para acessar este processo.');
+        }
+      }
     }
 
     return processo;
@@ -266,8 +332,8 @@ export class ProcessosService {
     updateProcessoDto: UpdateProcessoDto,
     usuario_id: string,
   ): Promise<ProcessoResponseDto> {
-    // Verifica se o processo existe
-    const processoExistente = await this.buscarPorId(id);
+    // Verifica se o processo existe e se o usuário tem permissão
+    const processoExistente = await this.buscarPorId(id, usuario_id);
 
     // Se está tentando atualizar o número SEI, verifica se não existe outro com o mesmo número
     if (updateProcessoDto.numero_sei && updateProcessoDto.numero_sei !== processoExistente.numero_sei) {
@@ -313,8 +379,8 @@ export class ProcessosService {
    * @returns Confirmação de remoção
    */
   async remover(id: string, usuario_id: string): Promise<{ removido: boolean }> {
-    // Verifica se o processo existe
-    const processo = await this.buscarPorId(id);
+    // Verifica se o processo existe e se o usuário tem permissão
+    const processo = await this.buscarPorId(id, usuario_id);
 
     // Verifica se há andamentos relacionados
     const andamentos = await this.prisma.andamento.findMany({
@@ -345,6 +411,138 @@ export class ProcessosService {
     );
 
     return { removido: true };
+  }
+
+  /**
+   * Conta processos vencendo hoje
+   * 
+   * @param usuario_id - ID do usuário que está buscando (para filtrar por unidade)
+   * @returns Número de processos vencendo hoje
+   */
+  async contarVencendoHoje(usuario_id?: string): Promise<number> {
+    // Busca o usuário para obter permissão e unidade_id
+    let unidade_id: string | undefined;
+    let permissao: string | undefined;
+    
+    if (usuario_id) {
+      const usuario = await this.prisma.usuario.findUnique({
+        where: { id: usuario_id },
+        select: { unidade_id: true, permissao: true },
+      });
+      
+      if (usuario) {
+        unidade_id = usuario.unidade_id;
+        permissao = usuario.permissao;
+      }
+    }
+
+    // Calcula início e fim do dia atual
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const fimDoDia = new Date(hoje);
+    fimDoDia.setHours(23, 59, 59, 999);
+
+    const searchParams: any = {
+      // Filtra por unidade do usuário (exceto para DEV e ADM que podem ver todos)
+      ...(unidade_id && permissao && !['DEV', 'ADM'].includes(permissao) && {
+        unidade_id: unidade_id,
+      }),
+      andamentos: {
+        some: {
+          OR: [
+            // Prazo original vencendo hoje (sem prorrogação)
+            {
+              prazo: {
+                gte: hoje,
+                lte: fimDoDia,
+              },
+              prorrogacao: null,
+              status: {
+                not: $Enums.StatusAndamento.CONCLUIDO,
+              },
+            },
+            // Prorrogação vencendo hoje
+            {
+              prorrogacao: {
+                gte: hoje,
+                lte: fimDoDia,
+              },
+              status: {
+                not: $Enums.StatusAndamento.CONCLUIDO,
+              },
+            },
+          ],
+        },
+      },
+    };
+
+    return await this.prisma.processo.count({
+      where: searchParams,
+    });
+  }
+
+  /**
+   * Conta processos atrasados
+   * 
+   * @param usuario_id - ID do usuário que está buscando (para filtrar por unidade)
+   * @returns Número de processos atrasados
+   */
+  async contarAtrasados(usuario_id?: string): Promise<number> {
+    // Busca o usuário para obter permissão e unidade_id
+    let unidade_id: string | undefined;
+    let permissao: string | undefined;
+    
+    if (usuario_id) {
+      const usuario = await this.prisma.usuario.findUnique({
+        where: { id: usuario_id },
+        select: { unidade_id: true, permissao: true },
+      });
+      
+      if (usuario) {
+        unidade_id = usuario.unidade_id;
+        permissao = usuario.permissao;
+      }
+    }
+
+    // Calcula início do dia atual
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+
+    const searchParams: any = {
+      // Filtra por unidade do usuário (exceto para DEV e ADM que podem ver todos)
+      ...(unidade_id && permissao && !['DEV', 'ADM'].includes(permissao) && {
+        unidade_id: unidade_id,
+      }),
+      andamentos: {
+        some: {
+          OR: [
+            // Prazo original já venceu (sem prorrogação)
+            {
+              prazo: {
+                lt: hoje,
+              },
+              prorrogacao: null,
+              status: {
+                not: $Enums.StatusAndamento.CONCLUIDO,
+              },
+            },
+            // Prorrogação já venceu
+            {
+              prorrogacao: {
+                lt: hoje,
+              },
+              status: {
+                not: $Enums.StatusAndamento.CONCLUIDO,
+              },
+            },
+          ],
+        },
+      },
+    };
+
+    return await this.prisma.processo.count({
+      where: searchParams,
+    });
   }
 }
 
