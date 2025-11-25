@@ -8,21 +8,24 @@ import {
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateProcessoDto } from './dto/create-processo.dto';
 import { UpdateProcessoDto } from './dto/update-processo.dto';
-import { ProcessoResponseDto, ProcessoPaginadoResponseDto } from './dto/processo-response.dto';
+import {
+  ProcessoResponseDto,
+  ProcessoPaginadoResponseDto,
+} from './dto/processo-response.dto';
 import { processo, $Enums } from '@prisma/client';
 import { AppService } from 'src/app.service';
 import { LogsService } from 'src/logs/logs.service';
 
 /**
  * Service - Camada de Lógica de Negócio
- * 
+ *
  * O Service é responsável por:
  * 1. Implementar a lógica de negócio (regras de negócio)
  * 2. Interagir com o banco de dados através do PrismaService
  * 3. Validar dados antes de salvar
  * 4. Tratar erros e exceções
  * 5. Retornar dados formatados para o Controller
- * 
+ *
  * O Service NÃO conhece HTTP, rotas ou requisições.
  * Ele apenas processa dados e retorna resultados.
  */
@@ -30,18 +33,21 @@ import { LogsService } from 'src/logs/logs.service';
 export class ProcessosService {
   constructor(
     private prisma: PrismaService, // Injeção de dependência do Prisma
-    private app: AppService,      // Serviço auxiliar para paginação
+    private app: AppService, // Serviço auxiliar para paginação
     private logsService: LogsService, // Serviço de logs
   ) {}
 
   /**
    * Cria um novo processo
-   * 
+   *
    * @param createProcessoDto - Dados do processo a ser criado
    * @param usuario_id - ID do usuário que está criando o processo
    * @returns Processo criado
    */
-  async criar(createProcessoDto: CreateProcessoDto, usuario_id: string): Promise<ProcessoResponseDto> {
+  async criar(
+    createProcessoDto: CreateProcessoDto,
+    usuario_id: string,
+  ): Promise<ProcessoResponseDto> {
     // Busca o usuário para obter a unidade_id
     const usuario = await this.prisma.usuario.findUnique({
       where: { id: usuario_id },
@@ -58,7 +64,9 @@ export class ProcessosService {
     });
 
     if (processoExistente) {
-      throw new BadRequestException('Já existe um processo com este número SEI.');
+      throw new BadRequestException(
+        'Já existe um processo com este número SEI.',
+      );
     }
 
     // Cria o processo no banco de dados
@@ -71,7 +79,9 @@ export class ProcessosService {
     });
 
     if (!processo) {
-      throw new InternalServerErrorException('Não foi possível criar o processo.');
+      throw new InternalServerErrorException(
+        'Não foi possível criar o processo.',
+      );
     }
 
     // Registra log
@@ -90,7 +100,7 @@ export class ProcessosService {
 
   /**
    * Busca todos os processos com paginação
-   * 
+   *
    * @param pagina - Número da página (padrão: 1)
    * @param limite - Itens por página (padrão: 10)
    * @param busca - Termo de busca (opcional)
@@ -113,13 +123,13 @@ export class ProcessosService {
     // Busca o usuário para obter permissão e unidade_id
     let unidade_id: string | undefined;
     let permissao: string | undefined;
-    
+
     if (usuario_id) {
       const usuario = await this.prisma.usuario.findUnique({
         where: { id: usuario_id },
         select: { unidade_id: true, permissao: true },
       });
-      
+
       if (usuario) {
         unidade_id = usuario.unidade_id;
         permissao = usuario.permissao;
@@ -132,75 +142,99 @@ export class ProcessosService {
     const fimDoDia = new Date(hoje);
     fimDoDia.setHours(23, 59, 59, 999);
 
-    // Monta os filtros de busca
+    // Monta os filtros de busca com OR entre vencendoHoje e atrasados
     const searchParams: any = {
       // Filtra por unidade do usuário (exceto para DEV e ADM que podem ver todos)
-      ...(unidade_id && permissao && !['DEV', 'ADM'].includes(permissao) && {
-        unidade_id: unidade_id,
-      }),
+      ...(unidade_id &&
+        permissao &&
+        !['DEV', 'ADM'].includes(permissao) && {
+          unidade_id: unidade_id,
+        }),
       ...(busca && {
         OR: [
           { numero_sei: { contains: busca } },
           { assunto: { contains: busca } },
         ],
       }),
-      ...(vencendoHoje && {
-        andamentos: {
-          some: {
-            OR: [
-              // Prazo original vencendo hoje (sem prorrogação)
-              {
-                prazo: {
-                  gte: hoje,
-                  lte: fimDoDia,
-                },
-                prorrogacao: null,
-                status: {
-                  not: $Enums.StatusAndamento.CONCLUIDO,
-                },
-              },
-              // Prorrogação vencendo hoje
-              {
-                prorrogacao: {
-                  gte: hoje,
-                  lte: fimDoDia,
-                },
-                status: {
-                  not: $Enums.StatusAndamento.CONCLUIDO,
-                },
-              },
-            ],
-          },
-        },
-      }),
-      ...(atrasados && {
-        andamentos: {
-          some: {
-            OR: [
-              // Prazo original já venceu (sem prorrogação)
-              {
-                prazo: {
-                  lt: hoje,
-                },
-                prorrogacao: null,
-                status: {
-                  not: $Enums.StatusAndamento.CONCLUIDO,
-                },
-              },
-              // Prorrogação já venceu
-              {
-                prorrogacao: {
-                  lt: hoje,
-                },
-                status: {
-                  not: $Enums.StatusAndamento.CONCLUIDO,
-                },
-              },
-            ],
-          },
-        },
-      }),
     };
+
+    // Se pelo menos um filtro de prazo estiver ativo
+    if (vencendoHoje || atrasados) {
+      const filtrosPrazo: any[] = [];
+
+      if (vencendoHoje) {
+        filtrosPrazo.push({
+          andamentos: {
+            some: {
+              OR: [
+                // Prazo original vencendo hoje (sem prorrogação)
+                {
+                  prazo: {
+                    gte: hoje,
+                    lte: fimDoDia,
+                  },
+                  prorrogacao: null,
+                  status: {
+                    not: $Enums.StatusAndamento.CONCLUIDO,
+                  },
+                },
+                // Prorrogação vencendo hoje
+                {
+                  prorrogacao: {
+                    gte: hoje,
+                    lte: fimDoDia,
+                  },
+                  status: {
+                    not: $Enums.StatusAndamento.CONCLUIDO,
+                  },
+                },
+              ],
+            },
+          },
+        });
+      }
+
+      if (atrasados) {
+        filtrosPrazo.push({
+          andamentos: {
+            some: {
+              OR: [
+                // Prazo original já venceu (sem prorrogação)
+                {
+                  prazo: {
+                    lt: hoje,
+                  },
+                  prorrogacao: null,
+                  status: {
+                    not: $Enums.StatusAndamento.CONCLUIDO,
+                  },
+                },
+                // Prorrogação já venceu
+                {
+                  prorrogacao: {
+                    lt: hoje,
+                  },
+                  status: {
+                    not: $Enums.StatusAndamento.CONCLUIDO,
+                  },
+                },
+              ],
+            },
+          },
+        });
+      }
+
+      // Se houver filtros de prazo, adiciona como OR
+      if (filtrosPrazo.length > 0) {
+        // Se já existe um OR (do busca), combina com os filtros de prazo
+        if (searchParams.OR) {
+          searchParams.AND = [{ OR: searchParams.OR }, { OR: filtrosPrazo }];
+          delete searchParams.OR;
+        } else {
+          searchParams.OR = filtrosPrazo;
+        }
+      }
+    }
 
     // Conta o total de processos que atendem aos filtros
     const total: number = await this.prisma.processo.count({
@@ -218,11 +252,31 @@ export class ProcessosService {
     const processos: processo[] = await this.prisma.processo.findMany({
       where: searchParams,
       orderBy: { criadoEm: 'desc' }, // Mais recentes primeiro
-      skip: (pagina - 1) * limite,    // Pula os registros das páginas anteriores
-      take: limite,                   // Limita a quantidade de resultados
+      skip: (pagina - 1) * limite, // Pula os registros das páginas anteriores
+      take: limite, // Limita a quantidade de resultados
       include: {
         andamentos: {
           orderBy: { criadoEm: 'desc' }, // Andamentos mais recentes primeiro
+          include: {
+            usuario: {
+              select: {
+                id: true,
+                nome: true,
+                nomeSocial: true,
+                login: true,
+                email: true,
+              },
+            },
+            usuarioProrrogacao: {
+              select: {
+                id: true,
+                nome: true,
+                nomeSocial: true,
+                login: true,
+                email: true,
+              },
+            },
+          },
         },
       },
     });
@@ -237,12 +291,15 @@ export class ProcessosService {
 
   /**
    * Busca um processo por ID
-   * 
+   *
    * @param id - ID do processo
    * @param usuario_id - ID do usuário que está buscando (para verificar permissão de acesso)
    * @returns Processo encontrado
    */
-  async buscarPorId(id: string, usuario_id?: string): Promise<ProcessoResponseDto> {
+  async buscarPorId(
+    id: string,
+    usuario_id?: string,
+  ): Promise<ProcessoResponseDto> {
     if (!id || id === '') {
       throw new BadRequestException('ID do processo é obrigatório.');
     }
@@ -252,6 +309,26 @@ export class ProcessosService {
       include: {
         andamentos: {
           orderBy: { criadoEm: 'desc' },
+          include: {
+            usuario: {
+              select: {
+                id: true,
+                nome: true,
+                nomeSocial: true,
+                login: true,
+                email: true,
+              },
+            },
+            usuarioProrrogacao: {
+              select: {
+                id: true,
+                nome: true,
+                nomeSocial: true,
+                login: true,
+                email: true,
+              },
+            },
+          },
         },
       },
     });
@@ -269,7 +346,9 @@ export class ProcessosService {
 
       if (usuario && !['DEV', 'ADM'].includes(usuario.permissao)) {
         if (processo.unidade_id !== usuario.unidade_id) {
-          throw new ForbiddenException('Você não tem permissão para acessar este processo.');
+          throw new ForbiddenException(
+            'Você não tem permissão para acessar este processo.',
+          );
         }
       }
     }
@@ -279,12 +358,15 @@ export class ProcessosService {
 
   /**
    * Busca um processo por número SEI
-   * 
+   *
    * @param numero_sei - Número SEI do processo
    * @param usuario_id - ID do usuário que está buscando (para verificar permissão de acesso)
    * @returns Processo encontrado
    */
-  async buscarPorNumeroSei(numero_sei: string, usuario_id?: string): Promise<ProcessoResponseDto> {
+  async buscarPorNumeroSei(
+    numero_sei: string,
+    usuario_id?: string,
+  ): Promise<ProcessoResponseDto> {
     if (!numero_sei || numero_sei === '') {
       throw new BadRequestException('Número SEI é obrigatório.');
     }
@@ -294,6 +376,26 @@ export class ProcessosService {
       include: {
         andamentos: {
           orderBy: { criadoEm: 'desc' },
+          include: {
+            usuario: {
+              select: {
+                id: true,
+                nome: true,
+                nomeSocial: true,
+                login: true,
+                email: true,
+              },
+            },
+            usuarioProrrogacao: {
+              select: {
+                id: true,
+                nome: true,
+                nomeSocial: true,
+                login: true,
+                email: true,
+              },
+            },
+          },
         },
       },
     });
@@ -311,7 +413,9 @@ export class ProcessosService {
 
       if (usuario && !['DEV', 'ADM'].includes(usuario.permissao)) {
         if (processo.unidade_id !== usuario.unidade_id) {
-          throw new ForbiddenException('Você não tem permissão para acessar este processo.');
+          throw new ForbiddenException(
+            'Você não tem permissão para acessar este processo.',
+          );
         }
       }
     }
@@ -321,7 +425,7 @@ export class ProcessosService {
 
   /**
    * Atualiza um processo
-   * 
+   *
    * @param id - ID do processo a ser atualizado
    * @param updateProcessoDto - Dados a serem atualizados
    * @param usuario_id - ID do usuário que está atualizando o processo
@@ -336,13 +440,18 @@ export class ProcessosService {
     const processoExistente = await this.buscarPorId(id, usuario_id);
 
     // Se está tentando atualizar o número SEI, verifica se não existe outro com o mesmo número
-    if (updateProcessoDto.numero_sei && updateProcessoDto.numero_sei !== processoExistente.numero_sei) {
+    if (
+      updateProcessoDto.numero_sei &&
+      updateProcessoDto.numero_sei !== processoExistente.numero_sei
+    ) {
       const processoComMesmoSei = await this.prisma.processo.findUnique({
         where: { numero_sei: updateProcessoDto.numero_sei },
       });
 
       if (processoComMesmoSei) {
-        throw new BadRequestException('Já existe outro processo com este número SEI.');
+        throw new BadRequestException(
+          'Já existe outro processo com este número SEI.',
+        );
       }
     }
 
@@ -353,6 +462,26 @@ export class ProcessosService {
       include: {
         andamentos: {
           orderBy: { criadoEm: 'desc' },
+          include: {
+            usuario: {
+              select: {
+                id: true,
+                nome: true,
+                nomeSocial: true,
+                login: true,
+                email: true,
+              },
+            },
+            usuarioProrrogacao: {
+              select: {
+                id: true,
+                nome: true,
+                nomeSocial: true,
+                login: true,
+                email: true,
+              },
+            },
+          },
         },
       },
     });
@@ -364,8 +493,14 @@ export class ProcessosService {
       'processo',
       processoAtualizado.id,
       usuario_id,
-      { numero_sei: processoExistente.numero_sei, assunto: processoExistente.assunto },
-      { numero_sei: processoAtualizado.numero_sei, assunto: processoAtualizado.assunto },
+      {
+        numero_sei: processoExistente.numero_sei,
+        assunto: processoExistente.assunto,
+      },
+      {
+        numero_sei: processoAtualizado.numero_sei,
+        assunto: processoAtualizado.assunto,
+      },
     );
 
     return processoAtualizado;
@@ -373,12 +508,15 @@ export class ProcessosService {
 
   /**
    * Remove um processo (soft delete - apenas marca como removido)
-   * 
+   *
    * @param id - ID do processo a ser removido
    * @param usuario_id - ID do usuário que está removendo o processo
    * @returns Confirmação de remoção
    */
-  async remover(id: string, usuario_id: string): Promise<{ removido: boolean }> {
+  async remover(
+    id: string,
+    usuario_id: string,
+  ): Promise<{ removido: boolean }> {
     // Verifica se o processo existe e se o usuário tem permissão
     const processo = await this.buscarPorId(id, usuario_id);
 
@@ -415,7 +553,7 @@ export class ProcessosService {
 
   /**
    * Conta processos vencendo hoje
-   * 
+   *
    * @param usuario_id - ID do usuário que está buscando (para filtrar por unidade)
    * @returns Número de processos vencendo hoje
    */
@@ -423,13 +561,13 @@ export class ProcessosService {
     // Busca o usuário para obter permissão e unidade_id
     let unidade_id: string | undefined;
     let permissao: string | undefined;
-    
+
     if (usuario_id) {
       const usuario = await this.prisma.usuario.findUnique({
         where: { id: usuario_id },
         select: { unidade_id: true, permissao: true },
       });
-      
+
       if (usuario) {
         unidade_id = usuario.unidade_id;
         permissao = usuario.permissao;
@@ -444,9 +582,11 @@ export class ProcessosService {
 
     const searchParams: any = {
       // Filtra por unidade do usuário (exceto para DEV e ADM que podem ver todos)
-      ...(unidade_id && permissao && !['DEV', 'ADM'].includes(permissao) && {
-        unidade_id: unidade_id,
-      }),
+      ...(unidade_id &&
+        permissao &&
+        !['DEV', 'ADM'].includes(permissao) && {
+          unidade_id: unidade_id,
+        }),
       andamentos: {
         some: {
           OR: [
@@ -483,7 +623,7 @@ export class ProcessosService {
 
   /**
    * Conta processos atrasados
-   * 
+   *
    * @param usuario_id - ID do usuário que está buscando (para filtrar por unidade)
    * @returns Número de processos atrasados
    */
@@ -491,13 +631,13 @@ export class ProcessosService {
     // Busca o usuário para obter permissão e unidade_id
     let unidade_id: string | undefined;
     let permissao: string | undefined;
-    
+
     if (usuario_id) {
       const usuario = await this.prisma.usuario.findUnique({
         where: { id: usuario_id },
         select: { unidade_id: true, permissao: true },
       });
-      
+
       if (usuario) {
         unidade_id = usuario.unidade_id;
         permissao = usuario.permissao;
@@ -510,9 +650,11 @@ export class ProcessosService {
 
     const searchParams: any = {
       // Filtra por unidade do usuário (exceto para DEV e ADM que podem ver todos)
-      ...(unidade_id && permissao && !['DEV', 'ADM'].includes(permissao) && {
-        unidade_id: unidade_id,
-      }),
+      ...(unidade_id &&
+        permissao &&
+        !['DEV', 'ADM'].includes(permissao) && {
+          unidade_id: unidade_id,
+        }),
       andamentos: {
         some: {
           OR: [
@@ -545,4 +687,3 @@ export class ProcessosService {
     });
   }
 }
-

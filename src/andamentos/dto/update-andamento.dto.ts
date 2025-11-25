@@ -5,22 +5,23 @@ import { IsOptional, IsDateString } from 'class-validator';
 
 /**
  * DTO para atualizar um andamento
- * 
+ *
  * Permite atualizar:
  * - Origem e Destino
  * - Prazo
  * - Data de prorrogação (status é definido automaticamente como PRORROGADO)
- * - Data de conclusão (status é definido automaticamente como CONCLUIDO)
+ * - Data de resposta (status é definido automaticamente como CONCLUIDO)
  * - Observações
- * 
+ *
  * NOTA: O status NÃO pode ser atualizado manualmente. Ele é definido automaticamente:
- * - CONCLUIDO: quando há data de conclusão
- * - PRORROGADO: quando há data de prorrogação (sem conclusão)
- * - EM_ANDAMENTO: quando não há conclusão nem prorrogação
+ * - CONCLUIDO: quando há data de resposta
+ * - PRORROGADO: quando há data de prorrogação (sem resposta)
+ * - EM_ANDAMENTO: quando não há resposta nem prorrogação
  */
 export class UpdateAndamentoDto extends PartialType(CreateAndamentoDto) {
   @ApiProperty({
-    description: 'Nova data limite se o processo foi prorrogado. Envie null para limpar.',
+    description:
+      'Nova data limite se o processo foi prorrogado. Envie null para limpar.',
     required: false,
     nullable: true,
   })
@@ -28,11 +29,11 @@ export class UpdateAndamentoDto extends PartialType(CreateAndamentoDto) {
   prorrogacao?: string | null;
 
   @ApiProperty({
-    description: 'Data de conclusão/retorno do processo. Envie null para limpar.',
+    description:
+      'Data de resposta/retorno do processo. Envie null para limpar.',
     required: false,
     nullable: true,
   })
   @IsOptional()
-  conclusao?: string | null;
+  resposta?: string | null;
 }
-

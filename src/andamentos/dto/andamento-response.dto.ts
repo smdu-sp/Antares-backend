@@ -3,7 +3,7 @@ import { andamento, processo, Usuario, StatusAndamento } from '@prisma/client';
 
 /**
  * DTO de resposta para Andamento
- * 
+ *
  * Inclui o processo relacionado para facilitar consultas
  */
 export class AndamentoResponseDto {
@@ -19,11 +19,14 @@ export class AndamentoResponseDto {
   @ApiProperty({ description: 'Data limite para retorno' })
   prazo: Date;
 
-  @ApiProperty({ description: 'Nova data limite se prorrogado', required: false })
+  @ApiProperty({
+    description: 'Nova data limite se prorrogado',
+    required: false,
+  })
   prorrogacao: Date | null;
 
-  @ApiProperty({ description: 'Data de conclusão/retorno', required: false })
-  conclusao: Date | null;
+  @ApiProperty({ description: 'Data de resposta/retorno', required: false })
+  resposta: Date | null;
 
   @ApiProperty({ description: 'Status do andamento', enum: StatusAndamento })
   status: StatusAndamento;
@@ -43,16 +46,24 @@ export class AndamentoResponseDto {
   @ApiProperty({ description: 'ID do usuário que criou o andamento' })
   usuario_id: string;
 
-  @ApiProperty({ description: 'ID do usuário que prorrogou o prazo', required: false })
+  @ApiProperty({
+    description: 'ID do usuário que prorrogou o prazo',
+    required: false,
+  })
   usuario_prorrogacao_id?: string | null;
 
   @ApiProperty({ description: 'Processo relacionado', required: false })
   processo?: processo;
 
-  @ApiProperty({ description: 'Usuário que criou o andamento', required: false })
+  @ApiProperty({
+    description: 'Usuário que criou o andamento',
+    required: false,
+  })
   usuario?: Usuario;
 
-  @ApiProperty({ description: 'Usuário que prorrogou o prazo', required: false })
+  @ApiProperty({
+    description: 'Usuário que prorrogou o prazo',
+    required: false,
+  })
   usuarioProrrogacao?: Usuario | null;
 }
-

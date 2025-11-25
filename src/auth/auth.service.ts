@@ -1,4 +1,9 @@
-import { ForbiddenException, Injectable, InternalServerErrorException, UnauthorizedException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  InternalServerErrorException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { UsuariosService } from 'src/usuarios/usuarios.service';
 import { Usuario } from '@prisma/client';
 import { UsuarioPayload } from './models/UsuarioPayload';
@@ -7,13 +12,12 @@ import { UsuarioToken } from './models/UsuarioToken';
 import { UsuarioJwt } from './models/UsuarioJwt';
 import { Client as LdapClient } from 'ldapts';
 
-
 @Injectable()
 export class AuthService {
   constructor(
     private readonly usuariosService: UsuariosService,
     private readonly jwtService: JwtService,
-  ) { }
+  ) {}
 
   async login(usuario: Usuario): Promise<UsuarioToken> {
     const { access_token, refresh_token } = await this.getTokens(usuario);
@@ -26,36 +30,84 @@ export class AuthService {
   }
 
   async getTokens(usuario: UsuarioJwt) {
-    const { id, login, nome, nomeSocial, email, status, avatar, permissao } = usuario;
-    const payload: UsuarioPayload = { sub: id, login, nome, nomeSocial, email, status, avatar, permissao };
+    const { id, login, nome, nomeSocial, email, status, avatar, permissao } =
+      usuario;
+    const payload: UsuarioPayload = {
+      sub: id,
+      login,
+      nome,
+      nomeSocial,
+      email,
+      status,
+      avatar,
+      permissao,
+    };
     const access_token = await this.jwtService.signAsync(payload, {
       expiresIn: '15m',
-      secret: process.env.JWT_SECRET
+      secret: process.env.JWT_SECRET,
     });
     const refresh_token = await this.jwtService.signAsync(payload, {
       expiresIn: '7d',
-      secret: process.env.RT_SECRET
+      secret: process.env.RT_SECRET,
     });
     return { access_token, refresh_token };
   }
 
   async validateUser(login: string, senha: string) {
+    console.log('🔍 Iniciando validação de usuário:', login);
+
     let usuario = await this.usuariosService.buscarPorLogin(login);
-    if (!usuario) throw new UnauthorizedException('Credenciais incorretas.');
-    if (usuario && usuario.status === false)
-      throw new UnauthorizedException('Usuário desativado.');
-    if (process.env.ENVIRONMENT == 'local')
-      if (usuario) return usuario;
-    const client: LdapClient = new LdapClient({
-      url: process.env.LDAP_SERVER,
-    });
-    try {
-      await client.bind(`${login}${process.env.LDAP_DOMAIN}`, senha);
-    } catch (error) {
-      console.log(error);
-      throw new UnauthorizedException('Credenciais incorretas.');
+
+    // Verifica se o usuário existe no banco local
+    if (!usuario) {
+      console.error('❌ Usuário não encontrado no banco de dados:', login);
+      throw new UnauthorizedException(
+        'Usuário não encontrado no sistema. Entre em contato com o administrador.',
+      );
     }
-    await client.unbind();
-    return usuario;
+
+    console.log('✅ Usuário encontrado no banco:', usuario.login);
+
+    // Verifica se o usuário está ativo
+    if (usuario.status === false) {
+      console.error('❌ Usuário desativado:', login);
+      throw new UnauthorizedException('Usuário desativado.');
+    }
+
+    console.log('✅ Usuário está ativo');
+
+    // Em ambiente local, pula a validação LDAP
+    const environment = process.env.ENVIRONMENT?.replace(
+      /"/g,
+      '',
+    ).toLowerCase();
+    console.log('🌍 Ambiente:', environment);
+
+    if (environment === 'local') {
+      console.log('🔓 Modo LOCAL: Autenticação LDAP desabilitada');
+      return usuario;
+    }
+
+    // Validação LDAP em ambiente de produção
+    console.log('🔐 Validando credenciais no LDAP...');
+    const client: LdapClient = new LdapClient({
+      url: process.env.LDAP_SERVER?.replace(/"/g, ''),
+    });
+
+    try {
+      const ldapDomain = process.env.LDAP_DOMAIN?.replace(/"/g, '');
+      const ldapUser = `${login}${ldapDomain}`;
+      console.log(`Tentando autenticar: ${ldapUser}`);
+
+      await client.bind(ldapUser, senha);
+      console.log('✅ Autenticação LDAP bem-sucedida');
+      await client.unbind();
+
+      return usuario;
+    } catch (error) {
+      console.error('❌ Erro na autenticação LDAP:', error.message);
+      await client.unbind().catch(() => {});
+      throw new UnauthorizedException('Credenciais LDAP incorretas.');
+    }
   }
 }

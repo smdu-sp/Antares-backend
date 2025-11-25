@@ -1,4 +1,4 @@
-
+import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { stringify } from 'json-bigint';
@@ -22,14 +22,15 @@ async function bootstrap() {
   const options = new DocumentBuilder()
     .addBearerAuth()
     .setTitle('Atendimento ao Público - Agendamentos')
-    .setDescription('Backend em NestJS para aplicação de agendamento de Atendimentos ao Público.',)
+    .setDescription(
+      'Backend em NestJS para aplicação de agendamento de Atendimentos ao Público.',
+    )
     .setVersion('versão 1.0')
     .build();
   const document = SwaggerModule.createDocument(app, options);
   SwaggerModule.setup('', app, document);
   await app.listen(port);
-  console.log("API outorga rodando em http://localhost:" + port);
-  console.log("SwaggerUI rodando em http://localhost:" + port + "/api");
-
+  console.log('API outorga rodando em http://localhost:' + port);
+  console.log('SwaggerUI rodando em http://localhost:' + port + '/api');
 }
 bootstrap();

@@ -10,4 +10,3 @@ import { LogsModule } from 'src/logs/logs.module';
   exports: [AndamentosService],
 })
 export class AndamentosModule {}
-

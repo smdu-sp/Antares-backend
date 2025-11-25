@@ -11,8 +11,13 @@ export class LocalAuthGuard extends AuthGuard('local') {
     return super.canActivate(context);
   }
 
-  handleRequest(err, user) {
-    if (err || !user) throw new UnauthorizedException(err?.message);
+  handleRequest(err, user, info) {
+    if (err || !user) {
+      const errorMessage =
+        err?.message || info?.message || 'Não foi possível realizar login';
+      console.error('❌ Erro no LocalAuthGuard:', errorMessage);
+      throw new UnauthorizedException(errorMessage);
+    }
     return user;
   }
 }
