@@ -14,6 +14,9 @@ export class UnidadeResponseDto implements Unidade {
   @ApiProperty({ description: 'Sigla da unidade' })
   sigla: string;
 
+  @ApiProperty({ description: 'Status ativo/inativo da unidade' })
+  ativo: boolean;
+
   @ApiProperty({ description: 'Data de criação' })
   criadoEm: Date;
 
@@ -37,6 +40,3 @@ export class UnidadePaginadoResponseDto {
   @ApiProperty({ description: 'Lista de unidades', type: [UnidadeResponseDto] })
   data: UnidadeResponseDto[];
 }
-
-
-

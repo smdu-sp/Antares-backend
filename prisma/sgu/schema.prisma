@@ -1,4 +1,4 @@
-generator client {
+generator sguClient {
   provider = "prisma-client-js"
   output   = "../../node_modules/@prisma/sgu/client"
 }

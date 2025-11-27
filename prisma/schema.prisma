@@ -39,6 +39,7 @@ model Unidade {
   id           String   @id @default(uuid()) // ID único da unidade (UUID gerado automaticamente) - Chave primária
   nome         String   @unique // Nome completo da unidade - Obrigatório - Único - Exemplo: "Coordenadoria Jurídica"
   sigla        String   @unique // Sigla da unidade - Obrigatório - Único - Exemplo: "COJUR"
+  ativo        Boolean  @default(true) // Indica se a unidade está ativa (true) ou foi excluída logicamente (false) - Boolean - Valor padrão: true
   criadoEm     DateTime @default(now()) // Data e hora de criação do registro da unidade - DateTime - Valor padrão: Data/hora atual (definido apenas na criação)
   atualizadoEm DateTime @default(now()) @updatedAt // Data e hora da última atualização do registro - DateTime - Atualizado automaticamente a cada modificação
 
@@ -57,7 +58,7 @@ model Usuario {
   email      String    @unique // E-mail do usuário - Obrigatório - Único - Deve ser um e-mail válido - Exemplo: "joao.silva@prefeitura.gov.br"
   permissao  Permissao @default(USR) // Permissão de acesso do usuário no sistema - Enum (Permissao) - Valor padrão: USR - Valores: DEV, ADM, TEC, USR
   status     Boolean   @default(true) // Status ativo/inativo do usuário - Boolean - Valor padrão: true (ativo) - false = usuário desativado, não pode acessar o sistema
-  avatar     String?   @db.Text // URL ou caminho da imagem de avatar do usuário - String (TEXT no banco) - Opcional - Armazena URL ou base64 da foto
+  avatar     String?   // URL ou caminho da imagem de avatar do usuário - String (TEXT no banco) - Opcional - Armazena URL ou base64 da foto
   unidade_id String // ID da unidade à qual o usuário pertence (chave estrangeira) - String (UUID) - Obrigatório - Referência à unidade do usuário
   unidade    Unidade   @relation(fields: [unidade_id], references: [id]) // Relacionamento com o modelo Unidade - Unidade à qual o usuário pertence
 
@@ -77,6 +78,7 @@ model processo {
   id           String      @id @default(uuid()) // ID único do processo (UUID gerado automaticamente) - Chave primária
   numero_sei   String      @unique // Número SEI (Sistema Eletrônico de Informações) do processo - String - Obrigatório - Único - Número único que identifica o processo no sistema SEI - Exemplo: "1234567"
   assunto      String // Assunto do processo - String - Obrigatório - Descrição resumida do que trata o processo - Exemplo: "Solicitação de licença para obra"
+  ativo        Boolean     @default(true) // Indica se o processo está ativo (true) ou foi excluído logicamente (false) - Boolean - Valor padrão: true
   unidade_id   String // ID da unidade que cadastrou o processo (chave estrangeira) - String (UUID) - Obrigatório - Referência à unidade responsável pelo processo
   unidade      Unidade     @relation(fields: [unidade_id], references: [id]) // Relacionamento com o modelo Unidade - Unidade que cadastrou o processo
   criadoEm     DateTime    @default(now()) // Data e hora de criação do registro do processo - DateTime - Valor padrão: Data/hora atual (definido apenas na criação)
@@ -96,6 +98,7 @@ model andamento {
   resposta               DateTime? // Data em que o processo recebeu resposta e foi retornado à unidade de origem - DateTime (opcional) - Data em que o processo foi finalizado e devolvido. Se preenchido, o status deve ser CONCLUIDO
   status                 StatusAndamento @default(EM_ANDAMENTO) // Status atual do andamento - Enum (StatusAndamento) - Valor padrão: EM_ANDAMENTO - Valores: EM_ANDAMENTO (em tramitação), CONCLUIDO (concluído e retornado), PRORROGADO (prazo prorrogado)
   observacao             String? // Observações sobre o andamento - String (opcional) - Campo livre para anotações, justificativas de prorrogação, ou outras informações relevantes
+  ativo                  Boolean         @default(true) // Indica se o andamento está ativo (true) ou foi excluído logicamente (false) - Boolean - Valor padrão: true
   criadoEm               DateTime        @default(now()) // Data e hora de criação do registro do andamento - DateTime - Valor padrão: Data/hora atual (definido apenas na criação) - Representa a data em que o processo foi enviado da origem para o destino
   atualizadoEm           DateTime        @default(now()) @updatedAt // Data e hora da última atualização do registro - DateTime - Atualizado automaticamente a cada modificação
   processo_id            String // ID do processo relacionado (chave estrangeira) - String (UUID) - Obrigatório - Referência ao processo ao qual este andamento pertence
@@ -112,11 +115,12 @@ model andamento {
 model Log {
   id           String   @id @default(uuid()) // ID único do log (UUID gerado automaticamente) - Chave primária
   tipoAcao     TipoAcao // Tipo de ação realizada - Enum (TipoAcao) - Obrigatório - Define qual tipo de operação foi realizada
-  descricao    String   @db.Text // Descrição detalhada da ação realizada - String (TEXT no banco) - Obrigatório - Descrição completa do que foi feito, incluindo dados relevantes
+  descricao    String   // Descrição detalhada da ação realizada - String (TEXT no banco) - Obrigatório - Descrição completa do que foi feito, incluindo dados relevantes
   entidadeTipo String // Tipo da entidade afetada (processo, andamento, etc.) - String - Obrigatório - Identifica qual tipo de entidade foi afetada pela ação - Exemplo: "processo", "andamento"
   entidadeId   String // ID da entidade afetada - String (UUID) - Obrigatório - ID da entidade que foi criada, atualizada ou removida
-  dadosAntigos String?  @db.Text // Dados anteriores (em JSON) antes da alteração - String (TEXT no banco) - Opcional - Armazena o estado anterior da entidade em formato JSON para comparação
-  dadosNovos   String?  @db.Text // Dados novos (em JSON) após a alteração - String (TEXT no banco) - Opcional - Armazena o novo estado da entidade em formato JSON
+  dadosAntigos String?  // Dados anteriores (em JSON) antes da alteração - String (TEXT no banco) - Opcional - Armazena o estado anterior da entidade em formato JSON para comparação
+  dadosNovos   String?  // Dados novos (em JSON) após a alteração - String (TEXT no banco) - Opcional - Armazena o novo estado da entidade em formato JSON
+  ativo        Boolean  @default(true) // Indica se o log está ativo (true) ou foi excluído logicamente (false) - Boolean - Valor padrão: true
   criadoEm     DateTime @default(now()) // Data e hora em que a ação foi realizada - DateTime - Valor padrão: Data/hora atual - Timestamp exato da ação
   usuario_id   String // ID do usuário que realizou a ação (chave estrangeira) - String (UUID) - Obrigatório - Referência ao usuário que executou a ação
   usuario      Usuario  @relation(fields: [usuario_id], references: [id]) // Relacionamento com o modelo Usuario - Usuário que realizou a ação

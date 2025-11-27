@@ -7,13 +7,16 @@ import {
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateUnidadeDto } from './dto/create-unidade.dto';
 import { UpdateUnidadeDto } from './dto/update-unidade.dto';
-import { UnidadeResponseDto, UnidadePaginadoResponseDto } from './dto/unidade-response.dto';
+import {
+  UnidadeResponseDto,
+  UnidadePaginadoResponseDto,
+} from './dto/unidade-response.dto';
 import { Unidade } from '@prisma/client';
 import { AppService } from 'src/app.service';
 
 /**
  * Service - Camada de Lógica de Negócio
- * 
+ *
  * O Service é responsável por:
  * 1. Implementar a lógica de negócio (regras de negócio)
  * 2. Interagir com o banco de dados através do PrismaService
@@ -30,7 +33,7 @@ export class UnidadesService {
 
   /**
    * Cria uma nova unidade
-   * 
+   *
    * @param createUnidadeDto - Dados da unidade a ser criada
    * @returns Unidade criada
    */
@@ -62,7 +65,9 @@ export class UnidadesService {
     });
 
     if (!unidade) {
-      throw new InternalServerErrorException('Não foi possível criar a unidade.');
+      throw new InternalServerErrorException(
+        'Não foi possível criar a unidade.',
+      );
     }
 
     return unidade;
@@ -70,7 +75,7 @@ export class UnidadesService {
 
   /**
    * Busca todas as unidades com paginação
-   * 
+   *
    * @param pagina - Número da página (padrão: 1)
    * @param limite - Itens por página (padrão: 10)
    * @param busca - Termo de busca (opcional)
@@ -86,6 +91,7 @@ export class UnidadesService {
 
     // Monta os filtros de busca
     const searchParams: any = {
+      ativo: true, // Apenas unidades ativas
       ...(busca && {
         OR: [
           { nome: { contains: busca } },
@@ -124,11 +130,12 @@ export class UnidadesService {
 
   /**
    * Busca todas as unidades (lista completa)
-   * 
+   *
    * @returns Lista completa de unidades
    */
   async listaCompleta(): Promise<UnidadeResponseDto[]> {
     const unidades: Unidade[] = await this.prisma.unidade.findMany({
+      where: { ativo: true }, // Apenas unidades ativas
       orderBy: { nome: 'asc' },
     });
 
@@ -137,7 +144,7 @@ export class UnidadesService {
 
   /**
    * Busca uma unidade por ID
-   * 
+   *
    * @param id - ID da unidade
    * @returns Unidade encontrada
    */
@@ -150,7 +157,7 @@ export class UnidadesService {
       where: { id },
     });
 
-    if (!unidade) {
+    if (!unidade || !unidade.ativo) {
       throw new NotFoundException('Unidade não encontrada.');
     }
 
@@ -159,7 +166,7 @@ export class UnidadesService {
 
   /**
    * Atualiza uma unidade
-   * 
+   *
    * @param id - ID da unidade a ser atualizada
    * @param updateUnidadeDto - Dados a serem atualizados
    * @returns Unidade atualizada
@@ -172,7 +179,10 @@ export class UnidadesService {
     const unidadeExistente = await this.buscarPorId(id);
 
     // Se está tentando atualizar o nome, verifica se não existe outra com o mesmo nome
-    if (updateUnidadeDto.nome && updateUnidadeDto.nome !== unidadeExistente.nome) {
+    if (
+      updateUnidadeDto.nome &&
+      updateUnidadeDto.nome !== unidadeExistente.nome
+    ) {
       const unidadeComMesmoNome = await this.prisma.unidade.findUnique({
         where: { nome: updateUnidadeDto.nome },
       });
@@ -183,13 +193,18 @@ export class UnidadesService {
     }
 
     // Se está tentando atualizar a sigla, verifica se não existe outra com a mesma sigla
-    if (updateUnidadeDto.sigla && updateUnidadeDto.sigla.toUpperCase() !== unidadeExistente.sigla) {
+    if (
+      updateUnidadeDto.sigla &&
+      updateUnidadeDto.sigla.toUpperCase() !== unidadeExistente.sigla
+    ) {
       const unidadeComMesmaSigla = await this.prisma.unidade.findUnique({
         where: { sigla: updateUnidadeDto.sigla.toUpperCase() },
       });
 
       if (unidadeComMesmaSigla) {
-        throw new BadRequestException('Já existe outra unidade com esta sigla.');
+        throw new BadRequestException(
+          'Já existe outra unidade com esta sigla.',
+        );
       }
     }
 
@@ -198,7 +213,9 @@ export class UnidadesService {
       where: { id },
       data: {
         ...(updateUnidadeDto.nome && { nome: updateUnidadeDto.nome }),
-        ...(updateUnidadeDto.sigla && { sigla: updateUnidadeDto.sigla.toUpperCase() }),
+        ...(updateUnidadeDto.sigla && {
+          sigla: updateUnidadeDto.sigla.toUpperCase(),
+        }),
       },
     });
 
@@ -206,8 +223,8 @@ export class UnidadesService {
   }
 
   /**
-   * Remove uma unidade
-   * 
+   * Remove uma unidade (soft delete - apenas marca como inativa)
+   *
    * @param id - ID da unidade a ser removida
    * @returns Confirmação de remoção
    */
@@ -215,36 +232,40 @@ export class UnidadesService {
     // Verifica se a unidade existe
     const unidade = await this.buscarPorId(id);
 
-    // Verifica se há usuários relacionados
+    // Verifica se há usuários ativos relacionados
     const usuarios = await this.prisma.usuario.findMany({
-      where: { unidade_id: id },
+      where: {
+        unidade_id: id,
+        status: true, // Apenas usuários ativos
+      },
     });
 
     if (usuarios.length > 0) {
       throw new BadRequestException(
-        `Não é possível remover a unidade pois existem ${usuarios.length} usuário(s) relacionado(s). Remova ou altere a unidade dos usuários primeiro.`,
+        `Não é possível remover a unidade pois existem ${usuarios.length} usuário(s) ativo(s) relacionado(s). Remova ou altere a unidade dos usuários primeiro.`,
       );
     }
 
-    // Verifica se há processos relacionados
+    // Verifica se há processos ativos relacionados
     const processos = await this.prisma.processo.findMany({
-      where: { unidade_id: id },
+      where: {
+        unidade_id: id,
+        ativo: true, // Apenas processos ativos
+      },
     });
 
     if (processos.length > 0) {
       throw new BadRequestException(
-        `Não é possível remover a unidade pois existem ${processos.length} processo(s) relacionado(s). Remova ou altere a unidade dos processos primeiro.`,
+        `Não é possível remover a unidade pois existem ${processos.length} processo(s) ativo(s) relacionado(s). Remova ou altere a unidade dos processos primeiro.`,
       );
     }
 
-    // Remove a unidade (hard delete)
-    await this.prisma.unidade.delete({
+    // Remove a unidade (soft delete - marca como inativa)
+    await this.prisma.unidade.update({
       where: { id },
+      data: { ativo: false },
     });
 
     return { removido: true };
   }
 }
-
-
-

@@ -182,7 +182,10 @@ export class AndamentosService {
     }
 
     const andamentos = await this.prisma.andamento.findMany({
-      where: { processo_id },
+      where: {
+        processo_id,
+        ativo: true, // Apenas andamentos ativos
+      },
       orderBy: { criadoEm: 'desc' },
       include: {
         processo: true,
@@ -214,7 +217,7 @@ export class AndamentosService {
       },
     });
 
-    if (!andamento) {
+    if (!andamento || !andamento.ativo) {
       throw new NotFoundException('Andamento não encontrado.');
     }
 
@@ -407,7 +410,7 @@ export class AndamentosService {
   }
 
   /**
-   * Remove um andamento
+   * Remove um andamento (soft delete - apenas marca como inativo)
    *
    * @param id - ID do andamento
    * @param usuario_id - ID do usuário que está removendo o andamento
@@ -419,8 +422,10 @@ export class AndamentosService {
   ): Promise<{ removido: boolean }> {
     const andamento = await this.buscarPorId(id);
 
-    await this.prisma.andamento.delete({
+    // Remove o andamento (soft delete - marca como inativo)
+    await this.prisma.andamento.update({
       where: { id },
+      data: { ativo: false },
     });
 
     // Registra log

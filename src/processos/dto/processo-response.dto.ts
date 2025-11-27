@@ -3,7 +3,7 @@ import { processo, andamento } from '@prisma/client';
 
 /**
  * DTO de resposta para Processo
- * 
+ *
  * Define como o processo será retornado pela API.
  * Inclui os andamentos relacionados para facilitar consultas.
  */
@@ -17,7 +17,10 @@ export class ProcessoResponseDto implements processo {
   @ApiProperty({ description: 'Assunto do processo' })
   assunto: string;
 
-  @ApiProperty({ description: 'ID da unidade que cadastrou o processo' })
+  @ApiProperty({ description: 'Status ativo/inativo do processo' })
+  ativo: boolean;
+
+  @ApiProperty({ description: 'ID da unidade responsável' })
   unidade_id: string;
 
   @ApiProperty({ description: 'Data de criação' })
@@ -26,13 +29,17 @@ export class ProcessoResponseDto implements processo {
   @ApiProperty({ description: 'Data da última atualização' })
   atualizadoEm: Date;
 
-  @ApiProperty({ description: 'Lista de andamentos do processo', type: 'array', required: false })
+  @ApiProperty({
+    description: 'Lista de andamentos do processo',
+    type: 'array',
+    required: false,
+  })
   andamentos?: andamento[];
 }
 
 /**
  * DTO para resposta paginada de processos
- * 
+ *
  * Usado quando há muitos processos e precisamos paginar os resultados
  */
 export class ProcessoPaginadoResponseDto {
@@ -45,7 +52,9 @@ export class ProcessoPaginadoResponseDto {
   @ApiProperty({ description: 'Limite de itens por página' })
   limite: number;
 
-  @ApiProperty({ description: 'Lista de processos', type: [ProcessoResponseDto] })
+  @ApiProperty({
+    description: 'Lista de processos',
+    type: [ProcessoResponseDto],
+  })
   data: ProcessoResponseDto[];
 }
-

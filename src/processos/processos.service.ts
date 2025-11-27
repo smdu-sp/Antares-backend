@@ -144,6 +144,7 @@ export class ProcessosService {
 
     // Monta os filtros de busca com OR entre vencendoHoje e atrasados
     const searchParams: any = {
+      ativo: true, // Apenas processos ativos
       // Filtra por unidade do usuário (exceto para DEV e ADM que podem ver todos)
       ...(unidade_id &&
         permissao &&
@@ -166,6 +167,7 @@ export class ProcessosService {
         filtrosPrazo.push({
           andamentos: {
             some: {
+              ativo: true, // Apenas andamentos ativos
               OR: [
                 // Prazo original vencendo hoje (sem prorrogação)
                 {
@@ -198,6 +200,7 @@ export class ProcessosService {
         filtrosPrazo.push({
           andamentos: {
             some: {
+              ativo: true, // Apenas andamentos ativos
               OR: [
                 // Prazo original já venceu (sem prorrogação)
                 {
@@ -256,6 +259,7 @@ export class ProcessosService {
       take: limite, // Limita a quantidade de resultados
       include: {
         andamentos: {
+          where: { ativo: true }, // Apenas andamentos ativos
           orderBy: { criadoEm: 'desc' }, // Andamentos mais recentes primeiro
           include: {
             usuario: {
@@ -308,6 +312,7 @@ export class ProcessosService {
       where: { id },
       include: {
         andamentos: {
+          where: { ativo: true }, // Apenas andamentos ativos
           orderBy: { criadoEm: 'desc' },
           include: {
             usuario: {
@@ -333,7 +338,7 @@ export class ProcessosService {
       },
     });
 
-    if (!processo) {
+    if (!processo || !processo.ativo) {
       throw new NotFoundException('Processo não encontrado.');
     }
 
@@ -375,6 +380,7 @@ export class ProcessosService {
       where: { numero_sei },
       include: {
         andamentos: {
+          where: { ativo: true }, // Apenas andamentos ativos
           orderBy: { criadoEm: 'desc' },
           include: {
             usuario: {
@@ -400,7 +406,7 @@ export class ProcessosService {
       },
     });
 
-    if (!processo) {
+    if (!processo || !processo.ativo) {
       throw new NotFoundException('Processo não encontrado.');
     }
 
@@ -461,6 +467,7 @@ export class ProcessosService {
       data: updateProcessoDto,
       include: {
         andamentos: {
+          where: { ativo: true }, // Apenas andamentos ativos
           orderBy: { criadoEm: 'desc' },
           include: {
             usuario: {
@@ -507,7 +514,7 @@ export class ProcessosService {
   }
 
   /**
-   * Remove um processo (soft delete - apenas marca como removido)
+   * Remove um processo (soft delete - apenas marca como inativo)
    *
    * @param id - ID do processo a ser removido
    * @param usuario_id - ID do usuário que está removendo o processo
@@ -520,21 +527,24 @@ export class ProcessosService {
     // Verifica se o processo existe e se o usuário tem permissão
     const processo = await this.buscarPorId(id, usuario_id);
 
-    // Verifica se há andamentos relacionados
+    // Verifica se há andamentos ativos relacionados
     const andamentos = await this.prisma.andamento.findMany({
-      where: { processo_id: id },
+      where: {
+        processo_id: id,
+        ativo: true, // Apenas andamentos ativos
+      },
     });
 
     if (andamentos.length > 0) {
       throw new BadRequestException(
-        `Não é possível remover o processo pois existem ${andamentos.length} andamento(s) relacionado(s). Remova os andamentos primeiro.`,
+        `Não é possível remover o processo pois existem ${andamentos.length} andamento(s) ativo(s) relacionado(s). Remova os andamentos primeiro.`,
       );
     }
 
-    // Remove o processo (hard delete - remove do banco)
-    // Se quiser soft delete, você pode adicionar um campo "deletado" no schema
-    await this.prisma.processo.delete({
+    // Remove o processo (soft delete - marca como inativo)
+    await this.prisma.processo.update({
       where: { id },
+      data: { ativo: false },
     });
 
     // Registra log
