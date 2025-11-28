@@ -172,6 +172,7 @@ export class ProcessosService {
           andamentos: {
             some: {
               ativo: true, // Apenas andamentos ativos
+              status: $Enums.StatusAndamento.EM_ANDAMENTO, // Apenas andamentos em andamento
               OR: [
                 // Prazo original vencendo hoje (sem prorrogação)
                 {
@@ -180,18 +181,12 @@ export class ProcessosService {
                     lte: fimDoDia,
                   },
                   prorrogacao: null,
-                  status: {
-                    not: $Enums.StatusAndamento.CONCLUIDO,
-                  },
                 },
                 // Prorrogação vencendo hoje
                 {
                   prorrogacao: {
                     gte: hoje,
                     lte: fimDoDia,
-                  },
-                  status: {
-                    not: $Enums.StatusAndamento.CONCLUIDO,
                   },
                 },
               ],
@@ -205,6 +200,7 @@ export class ProcessosService {
           andamentos: {
             some: {
               ativo: true, // Apenas andamentos ativos
+              status: $Enums.StatusAndamento.EM_ANDAMENTO, // Apenas andamentos em andamento
               OR: [
                 // Prazo original já venceu (sem prorrogação)
                 {
@@ -212,17 +208,11 @@ export class ProcessosService {
                     lt: hoje,
                   },
                   prorrogacao: null,
-                  status: {
-                    not: $Enums.StatusAndamento.CONCLUIDO,
-                  },
                 },
                 // Prorrogação já venceu
                 {
                   prorrogacao: {
                     lt: hoje,
-                  },
-                  status: {
-                    not: $Enums.StatusAndamento.CONCLUIDO,
                   },
                 },
               ],
@@ -764,8 +754,11 @@ export class ProcessosService {
         !['DEV', 'ADM'].includes(permissao) && {
           unidade_id: unidade_id,
         }),
+      ativo: true, // Apenas processos ativos
       andamentos: {
         some: {
+          ativo: true, // Apenas andamentos ativos
+          status: $Enums.StatusAndamento.EM_ANDAMENTO, // Apenas andamentos em andamento
           OR: [
             // Prazo original vencendo hoje (sem prorrogação)
             {
@@ -774,18 +767,12 @@ export class ProcessosService {
                 lte: fimDoDia,
               },
               prorrogacao: null,
-              status: {
-                not: $Enums.StatusAndamento.CONCLUIDO,
-              },
             },
             // Prorrogação vencendo hoje
             {
               prorrogacao: {
                 gte: hoje,
                 lte: fimDoDia,
-              },
-              status: {
-                not: $Enums.StatusAndamento.CONCLUIDO,
               },
             },
           ],
@@ -832,8 +819,11 @@ export class ProcessosService {
         !['DEV', 'ADM'].includes(permissao) && {
           unidade_id: unidade_id,
         }),
+      ativo: true, // Apenas processos ativos
       andamentos: {
         some: {
+          ativo: true, // Apenas andamentos ativos
+          status: $Enums.StatusAndamento.EM_ANDAMENTO, // Apenas andamentos em andamento
           OR: [
             // Prazo original já venceu (sem prorrogação)
             {
@@ -841,17 +831,11 @@ export class ProcessosService {
                 lt: hoje,
               },
               prorrogacao: null,
-              status: {
-                not: $Enums.StatusAndamento.CONCLUIDO,
-              },
             },
             // Prorrogação já venceu
             {
               prorrogacao: {
                 lt: hoje,
-              },
-              status: {
-                not: $Enums.StatusAndamento.CONCLUIDO,
               },
             },
           ],
