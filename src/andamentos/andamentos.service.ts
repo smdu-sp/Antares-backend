@@ -57,6 +57,9 @@ export class AndamentosService {
 
     // Converte a string de data para Date
     const prazo = new Date(createAndamentoDto.prazo);
+    const data_envio = createAndamentoDto.data_envio
+      ? new Date(createAndamentoDto.data_envio)
+      : null;
 
     // Cria o andamento
     const andamento: andamento = await this.prisma.andamento.create({
@@ -64,6 +67,7 @@ export class AndamentosService {
         processo_id: createAndamentoDto.processo_id,
         origem: createAndamentoDto.origem,
         destino: createAndamentoDto.destino,
+        data_envio: data_envio,
         prazo: prazo,
         status:
           createAndamentoDto.status || $Enums.StatusAndamento.EM_ANDAMENTO,
@@ -246,6 +250,11 @@ export class AndamentosService {
 
     if (updateAndamentoDto.origem) data.origem = updateAndamentoDto.origem;
     if (updateAndamentoDto.destino) data.destino = updateAndamentoDto.destino;
+    if (updateAndamentoDto.data_envio !== undefined) {
+      data.data_envio = updateAndamentoDto.data_envio
+        ? new Date(updateAndamentoDto.data_envio)
+        : null;
+    }
     if (updateAndamentoDto.prazo)
       data.prazo = new Date(updateAndamentoDto.prazo);
     // Status não pode ser atualizado manualmente - é definido automaticamente pelas etapas

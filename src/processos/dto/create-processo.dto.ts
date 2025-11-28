@@ -1,9 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, MinLength } from 'class-validator';
+import { IsString, MinLength, IsDateString, IsOptional } from 'class-validator';
 
 /**
  * DTO (Data Transfer Object) para criar um novo processo
- * 
+ *
  * DTOs são objetos que definem a estrutura dos dados que serão recebidos
  * pela API. Eles servem para:
  * 1. Validar os dados de entrada
@@ -26,5 +26,20 @@ export class CreateProcessoDto {
   @IsString({ message: 'Assunto deve ser texto.' })
   @MinLength(5, { message: 'Assunto deve ter ao menos 5 caracteres.' })
   assunto: string;
-}
 
+  @ApiProperty({
+    description: 'Data em que o gabinete recebeu o processo (ISO 8601)',
+    example: '2025-11-28T00:00:00.000Z',
+    required: false,
+    default: 'Data/hora atual',
+  })
+  @IsOptional()
+  @IsDateString(
+    {},
+    {
+      message:
+        'Data de recebimento deve ser uma data válida no formato ISO 8601.',
+    },
+  )
+  data_recebimento?: string;
+}

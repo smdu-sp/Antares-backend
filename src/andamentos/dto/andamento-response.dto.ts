@@ -16,6 +16,9 @@ export class AndamentoResponseDto {
   @ApiProperty({ description: 'Unidade de destino' })
   destino: string;
 
+  @ApiProperty({ description: 'Data de envio do processo', required: false })
+  data_envio: Date | null;
+
   @ApiProperty({ description: 'Data limite para retorno' })
   prazo: Date;
 

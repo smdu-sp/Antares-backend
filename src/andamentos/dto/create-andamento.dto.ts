@@ -1,10 +1,16 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { $Enums } from '@prisma/client';
-import { IsString, IsEnum, IsOptional, IsDateString, MinLength } from 'class-validator';
+import {
+  IsString,
+  IsEnum,
+  IsOptional,
+  IsDateString,
+  MinLength,
+} from 'class-validator';
 
 /**
  * DTO para criar um novo andamento
- * 
+ *
  * Representa o envio de um processo de uma unidade (origem) para outra (destino)
  */
 export class CreateAndamentoDto {
@@ -32,6 +38,19 @@ export class CreateAndamentoDto {
   destino: string;
 
   @ApiProperty({
+    description:
+      'Data em que o gabinete enviou o processo para a unidade (ISO 8601)',
+    example: '2025-11-28T00:00:00.000Z',
+    required: false,
+  })
+  @IsOptional()
+  @IsDateString(
+    {},
+    { message: 'Data de envio deve ser uma data válida no formato ISO 8601.' },
+  )
+  data_envio?: string;
+
+  @ApiProperty({
     description: 'Data limite para retorno do processo',
     example: '2025-12-31T23:59:59.000Z',
   })
@@ -56,4 +75,3 @@ export class CreateAndamentoDto {
   @IsString({ message: 'Observação deve ser texto.' })
   observacao?: string;
 }
-

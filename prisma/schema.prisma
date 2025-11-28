@@ -75,15 +75,19 @@ model Usuario {
 
 // Model: processo | Tabela: processos | Descrição: Armazena informações dos processos administrativos que são controlados pelo sistema
 model processo {
-  id           String      @id @default(uuid()) // ID único do processo (UUID gerado automaticamente) - Chave primária
-  numero_sei   String      @unique // Número SEI (Sistema Eletrônico de Informações) do processo - String - Obrigatório - Único - Número único que identifica o processo no sistema SEI - Exemplo: "1234567"
-  assunto      String // Assunto do processo - String - Obrigatório - Descrição resumida do que trata o processo - Exemplo: "Solicitação de licença para obra"
-  ativo        Boolean     @default(true) // Indica se o processo está ativo (true) ou foi excluído logicamente (false) - Boolean - Valor padrão: true
-  unidade_id   String // ID da unidade que cadastrou o processo (chave estrangeira) - String (UUID) - Obrigatório - Referência à unidade responsável pelo processo
-  unidade      Unidade     @relation(fields: [unidade_id], references: [id]) // Relacionamento com o modelo Unidade - Unidade que cadastrou o processo
-  criadoEm     DateTime    @default(now()) // Data e hora de criação do registro do processo - DateTime - Valor padrão: Data/hora atual (definido apenas na criação)
-  atualizadoEm DateTime    @default(now()) @updatedAt // Data e hora da última atualização do registro - DateTime - Atualizado automaticamente a cada modificação
-  andamentos   andamento[] // Lista de andamentos relacionados a este processo - Array de andamento - Histórico completo de movimentações do processo entre unidades
+  id                      String      @id @default(uuid()) // ID único do processo (UUID gerado automaticamente) - Chave primária
+  numero_sei              String      @unique // Número SEI (Sistema Eletrônico de Informações) do processo - String - Obrigatório - Único - Número único que identifica o processo no sistema SEI - Exemplo: "1234567"
+  assunto                 String // Assunto do processo - String - Obrigatório - Descrição resumida do que trata o processo - Exemplo: "Solicitação de licença para obra"
+  data_recebimento        DateTime    @default(now()) // Data em que o gabinete recebeu o processo - DateTime - Valor padrão: Data/hora atual - Pode ser data atual ou anterior
+  data_resposta_final     DateTime? // Data em que o gabinete respondeu o processo ao solicitante - DateTime (opcional) - Data de fechamento/conclusão do processo
+  resposta_final          String? // Resposta final dada ao processo - String (opcional) - Texto com a resposta/despacho final do processo
+  unidade_respondida_id   String? // ID/Sigla da unidade que foi respondida - String (opcional) - Identifica qual unidade recebeu a resposta final
+  ativo                   Boolean     @default(true) // Indica se o processo está ativo (true) ou foi excluído logicamente (false) - Boolean - Valor padrão: true
+  unidade_id              String // ID da unidade que cadastrou o processo (chave estrangeira) - String (UUID) - Obrigatório - Referência à unidade responsável pelo processo
+  unidade                 Unidade     @relation(fields: [unidade_id], references: [id]) // Relacionamento com o modelo Unidade - Unidade que cadastrou o processo
+  criadoEm                DateTime    @default(now()) // Data e hora de criação do registro do processo - DateTime - Valor padrão: Data/hora atual (definido apenas na criação)
+  atualizadoEm            DateTime    @default(now()) @updatedAt // Data e hora da última atualização do registro - DateTime - Atualizado automaticamente a cada modificação
+  andamentos              andamento[] // Lista de andamentos relacionados a este processo - Array de andamento - Histórico completo de movimentações do processo entre unidades
 
   @@map("processos")
 }
@@ -93,6 +97,7 @@ model andamento {
   id                     String          @id @default(uuid()) // ID único do andamento (UUID gerado automaticamente) - Chave primária
   origem                 String // Unidade de origem (de onde o processo está saindo) - String - Obrigatório - Nome ou sigla da unidade que está enviando o processo - Exemplo: "EXPEDIENTE", "COORDENADORIA_JURIDICA"
   destino                String // Unidade de destino (para onde o processo está indo) - String - Obrigatório - Nome ou sigla da unidade que receberá o processo - Exemplo: "COORDENADORIA_JURIDICA", "GABINETE"
+  data_envio             DateTime? // Data em que o gabinete enviou o processo para a unidade - DateTime (opcional) - Data em que o processo foi efetivamente enviado da origem para o destino - Pode ser preenchida na criação ou posteriormente
   prazo                  DateTime        @default(now()) // Data limite para retorno do processo à unidade de origem - DateTime - Obrigatório - Valor padrão: Data/hora atual (deve ser ajustado ao criar) - Data até a qual o processo deve ser retornado. Se não retornado até esta data, está em atraso
   prorrogacao            DateTime? // Nova data limite caso o processo tenha sido prorrogado - DateTime (opcional) - Se preenchido, indica que o prazo foi prorrogado e esta é a nova data limite - Observação: Quando preenchido, o status deve ser alterado para PRORROGADO
   resposta               DateTime? // Data em que o processo recebeu resposta e foi retornado à unidade de origem - DateTime (opcional) - Data em que o processo foi finalizado e devolvido. Se preenchido, o status deve ser CONCLUIDO

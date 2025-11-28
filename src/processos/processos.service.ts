@@ -8,6 +8,7 @@ import {
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateProcessoDto } from './dto/create-processo.dto';
 import { UpdateProcessoDto } from './dto/update-processo.dto';
+import { CreateRespostaFinalDto } from './dto/create-resposta-final.dto';
 import {
   ProcessoResponseDto,
   ProcessoPaginadoResponseDto,
@@ -74,6 +75,9 @@ export class ProcessosService {
       data: {
         numero_sei: createProcessoDto.numero_sei,
         assunto: createProcessoDto.assunto,
+        data_recebimento: createProcessoDto.data_recebimento
+          ? new Date(createProcessoDto.data_recebimento)
+          : undefined,
         unidade_id: usuario.unidade_id,
       },
     });
@@ -464,7 +468,12 @@ export class ProcessosService {
     // Atualiza o processo
     const processoAtualizado = await this.prisma.processo.update({
       where: { id },
-      data: updateProcessoDto,
+      data: {
+        ...updateProcessoDto,
+        data_recebimento: updateProcessoDto.data_recebimento
+          ? new Date(updateProcessoDto.data_recebimento)
+          : undefined,
+      },
       include: {
         andamentos: {
           where: { ativo: true }, // Apenas andamentos ativos
@@ -511,6 +520,164 @@ export class ProcessosService {
     );
 
     return processoAtualizado;
+  }
+
+  /**
+   * Cria resposta final para um processo
+   *
+   * @param createRespostaFinalDto - Dados da resposta final
+   * @param usuario_id - ID do usuário que está criando a resposta
+   * @returns Processo atualizado com resposta final
+   */
+  async criarRespostaFinal(
+    createRespostaFinalDto: CreateRespostaFinalDto,
+    usuario_id: string,
+  ): Promise<ProcessoResponseDto> {
+    const {
+      processo_id,
+      data_resposta_final,
+      resposta_final,
+      unidade_respondida_id,
+    } = createRespostaFinalDto;
+
+    // Verifica se o processo existe
+    const processoExistente = await this.prisma.processo.findUnique({
+      where: { id: processo_id },
+      include: {
+        andamentos: {
+          where: { ativo: true },
+          select: { origem: true, destino: true },
+        },
+      },
+    });
+
+    if (!processoExistente) {
+      throw new NotFoundException('Processo não encontrado.');
+    }
+
+    if (!processoExistente.ativo) {
+      throw new BadRequestException('Processo está inativo.');
+    }
+
+    // Verifica se há andamentos cadastrados
+    if (processoExistente.andamentos.length === 0) {
+      throw new BadRequestException(
+        'O processo deve ter pelo menos um andamento cadastrado antes de criar resposta final.',
+      );
+    }
+
+    // Valida se a unidade respondida existe nos andamentos
+    const unidadesNosAndamentos = new Set<string>();
+    processoExistente.andamentos.forEach((and) => {
+      unidadesNosAndamentos.add(and.origem);
+      unidadesNosAndamentos.add(and.destino);
+    });
+
+    if (!unidadesNosAndamentos.has(unidade_respondida_id)) {
+      throw new BadRequestException(
+        'A unidade respondida não existe nos andamentos deste processo.',
+      );
+    }
+
+    // Valida se a data não é futura
+    const dataResposta = new Date(data_resposta_final);
+    const hoje = new Date();
+    hoje.setHours(23, 59, 59, 999); // Fim do dia atual
+
+    if (dataResposta > hoje) {
+      throw new BadRequestException(
+        'A data de resposta final não pode ser futura.',
+      );
+    }
+
+    // Atualiza o processo com a resposta final
+    const processoAtualizado = await this.prisma.processo.update({
+      where: { id: processo_id },
+      data: {
+        data_resposta_final: dataResposta,
+        resposta_final,
+        unidade_respondida_id,
+      },
+      include: {
+        andamentos: {
+          where: { ativo: true },
+          orderBy: { criadoEm: 'desc' },
+          include: {
+            usuario: {
+              select: {
+                id: true,
+                nome: true,
+                nomeSocial: true,
+                login: true,
+                email: true,
+              },
+            },
+            usuarioProrrogacao: {
+              select: {
+                id: true,
+                nome: true,
+                nomeSocial: true,
+                login: true,
+                email: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Registra log
+    await this.logsService.criar(
+      $Enums.TipoAcao.PROCESSO_ATUALIZADO,
+      `Resposta final criada para processo: ${processoAtualizado.numero_sei} - Unidade respondida: ${unidade_respondida_id}`,
+      'processo',
+      processoAtualizado.id,
+      usuario_id,
+      {
+        data_resposta_final: processoExistente.data_resposta_final,
+        resposta_final: processoExistente.resposta_final,
+        unidade_respondida_id: processoExistente.unidade_respondida_id,
+      },
+      {
+        data_resposta_final: processoAtualizado.data_resposta_final,
+        resposta_final: processoAtualizado.resposta_final,
+        unidade_respondida_id: processoAtualizado.unidade_respondida_id,
+      },
+    );
+
+    return processoAtualizado;
+  }
+
+  /**
+   * Busca unidades disponíveis para resposta final
+   * Retorna as unidades únicas que aparecem nos andamentos do processo
+   *
+   * @param id - ID do processo
+   * @returns Lista de unidades disponíveis
+   */
+  async buscarUnidadesResposta(id: string): Promise<{ unidades: string[] }> {
+    const processo = await this.prisma.processo.findUnique({
+      where: { id },
+      include: {
+        andamentos: {
+          where: { ativo: true },
+          select: { origem: true, destino: true },
+        },
+      },
+    });
+
+    if (!processo) {
+      throw new NotFoundException('Processo não encontrado.');
+    }
+
+    // Coleta todas as unidades únicas dos andamentos
+    const unidadesSet = new Set<string>();
+    processo.andamentos.forEach((andamento) => {
+      unidadesSet.add(andamento.origem);
+      unidadesSet.add(andamento.destino);
+    });
+
+    return { unidades: Array.from(unidadesSet).sort() };
   }
 
   /**

@@ -17,6 +17,24 @@ export class ProcessoResponseDto implements processo {
   @ApiProperty({ description: 'Assunto do processo' })
   assunto: string;
 
+  @ApiProperty({ description: 'Data em que o gabinete recebeu o processo' })
+  data_recebimento: Date;
+
+  @ApiProperty({
+    description: 'Data de resposta final ao solicitante',
+    required: false,
+  })
+  data_resposta_final: Date | null;
+
+  @ApiProperty({ description: 'Texto da resposta final', required: false })
+  resposta_final: string | null;
+
+  @ApiProperty({
+    description: 'ID/Sigla da unidade respondida',
+    required: false,
+  })
+  unidade_respondida_id: string | null;
+
   @ApiProperty({ description: 'Status ativo/inativo do processo' })
   ativo: boolean;
 
