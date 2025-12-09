@@ -28,6 +28,14 @@ export class CreateProcessoDto {
   assunto: string;
 
   @ApiProperty({
+    description: 'Unidade de origem do processo',
+    example: 'EXPEDIENTE',
+  })
+  @IsString({ message: 'Origem deve ser texto.' })
+  @MinLength(2, { message: 'Origem deve ter ao menos 2 caracteres.' })
+  origem: string;
+
+  @ApiProperty({
     description: 'Data em que o gabinete recebeu o processo (ISO 8601)',
     example: '2025-11-28T00:00:00.000Z',
     required: false,

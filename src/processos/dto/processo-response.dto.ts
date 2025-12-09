@@ -17,6 +17,9 @@ export class ProcessoResponseDto implements processo {
   @ApiProperty({ description: 'Assunto do processo' })
   assunto: string;
 
+  @ApiProperty({ description: 'Unidade de origem do processo' })
+  origem: string;
+
   @ApiProperty({ description: 'Data em que o gabinete recebeu o processo' })
   data_recebimento: Date;
 

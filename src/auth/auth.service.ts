@@ -54,8 +54,6 @@ export class AuthService {
   }
 
   async validateUser(login: string, senha: string) {
-    console.log('🔍 Iniciando validação de usuário:', login);
-
     let usuario = await this.usuariosService.buscarPorLogin(login);
 
     // Verifica se o usuário existe no banco local
@@ -66,30 +64,24 @@ export class AuthService {
       );
     }
 
-    console.log('✅ Usuário encontrado no banco:', usuario.login);
-
     // Verifica se o usuário está ativo
     if (usuario.status === false) {
       console.error('❌ Usuário desativado:', login);
       throw new UnauthorizedException('Usuário desativado.');
     }
 
-    console.log('✅ Usuário está ativo');
-
     // Em ambiente local, pula a validação LDAP
     const environment = process.env.ENVIRONMENT?.replace(
       /"/g,
       '',
     ).toLowerCase();
-    console.log('🌍 Ambiente:', environment);
 
     if (environment === 'local') {
-      console.log('🔓 Modo LOCAL: Autenticação LDAP desabilitada');
       return usuario;
     }
 
     // Validação LDAP em ambiente de produção
-    console.log('🔐 Validando credenciais no LDAP...');
+
     const client: LdapClient = new LdapClient({
       url: process.env.LDAP_SERVER?.replace(/"/g, ''),
     });
@@ -97,10 +89,9 @@ export class AuthService {
     try {
       const ldapDomain = process.env.LDAP_DOMAIN?.replace(/"/g, '');
       const ldapUser = `${login}${ldapDomain}`;
-      console.log(`Tentando autenticar: ${ldapUser}`);
 
       await client.bind(ldapUser, senha);
-      console.log('✅ Autenticação LDAP bem-sucedida');
+
       await client.unbind();
 
       return usuario;

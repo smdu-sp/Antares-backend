@@ -245,6 +245,24 @@ export class AndamentosService {
     // Verifica se o andamento existe
     await this.buscarPorId(id);
 
+    // Normaliza payloads inesperados do frontend:
+    // - aceita campo `conclusao` como sinônimo de `resposta` (data)
+    // - se `resposta` vier como texto não-ISO, tratamos como `observacao`
+    const payload: any = updateAndamentoDto as any;
+    if (payload.conclusao !== undefined && payload.conclusao !== null) {
+      payload.resposta = payload.conclusao;
+    }
+    if (payload.resposta !== undefined && payload.resposta !== null) {
+      const possibleDate = new Date(payload.resposta as any);
+      if (isNaN(possibleDate.getTime())) {
+        // Trata `resposta` textual como observação (se não houver observacao explicita)
+        if (!payload.observacao) {
+          payload.observacao = payload.resposta;
+        }
+        delete payload.resposta;
+      }
+    }
+
     // Prepara os dados para atualização
     const data: any = {};
 
@@ -289,7 +307,14 @@ export class AndamentosService {
           data.status = $Enums.StatusAndamento.EM_ANDAMENTO;
         }
       } else {
-        data.resposta = new Date(updateAndamentoDto.resposta);
+        // Valida que a resposta é uma data válida
+        const parsedResposta = new Date(updateAndamentoDto.resposta);
+        if (isNaN(parsedResposta.getTime())) {
+          throw new BadRequestException(
+            'Campo `resposta` deve ser uma data válida em formato ISO 8601.',
+          );
+        }
+        data.resposta = parsedResposta;
         // Resposta tem prioridade sobre prorrogação
         data.status = $Enums.StatusAndamento.CONCLUIDO;
       }
@@ -300,16 +325,81 @@ export class AndamentosService {
       where: { id },
     });
 
-    // Atualiza o andamento
-    const andamentoAtualizado = await this.prisma.andamento.update({
-      where: { id },
-      data,
-      include: {
-        processo: true,
-        usuario: true,
-        usuarioProrrogacao: true,
-      },
-    });
+    // Se for uma resposta (conclusão), atualizamos o andamento e, se necessário,
+    // também atualizamos o processo relacionado dentro de uma transação para
+    // garantir atomicidade e evitar estados parciais.
+    let andamentoAtualizado;
+    let processoAtualizado: any = null;
+    let processoPreUpdate: any = null;
+
+    const isRespostaSet =
+      updateAndamentoDto.resposta !== undefined &&
+      updateAndamentoDto.resposta !== null;
+
+    if (isRespostaSet) {
+      // Converte a data para Date (já preparado em `data` acima)
+      const respostaDate = data.resposta as Date;
+
+      // Busca processo atual para decidir se precisamos atualizá-lo
+      processoPreUpdate = await this.prisma.processo.findUnique({
+        where: { id: andamentoAntigo.processo_id },
+        select: { data_resposta_final: true, resposta_final: true },
+      });
+
+      // Prepara atualização do processo somente se necessário (não sobrescrever dados existentes)
+      const processoUpdateData: any = {};
+      if (!processoPreUpdate.data_resposta_final) {
+        processoUpdateData.data_resposta_final = respostaDate;
+      }
+      // Use a observação enviada no update como possível texto da resposta final
+      if (!processoPreUpdate.resposta_final && updateAndamentoDto.observacao) {
+        processoUpdateData.resposta_final = updateAndamentoDto.observacao;
+      }
+      // Define unidade_respondida_id como a unidade destino do andamento (quem respondeu)
+      if (Object.keys(processoUpdateData).length > 0) {
+        processoUpdateData.unidade_respondida_id = andamentoAntigo.destino;
+      }
+
+      // Monta operações da transação: atualiza andamento sempre, atualiza processo se necessário
+      const ops: any[] = [
+        this.prisma.andamento.update({
+          where: { id },
+          data,
+          include: {
+            processo: true,
+            usuario: true,
+            usuarioProrrogacao: true,
+          },
+        }),
+      ];
+
+      if (Object.keys(processoUpdateData).length > 0) {
+        ops.push(
+          this.prisma.processo.update({
+            where: { id: andamentoAntigo.processo_id },
+            data: processoUpdateData,
+            include: {
+              andamentos: false,
+            },
+          }),
+        );
+      }
+
+      const results = await this.prisma.$transaction(ops);
+      andamentoAtualizado = results[0];
+      if (results.length > 1) processoAtualizado = results[1];
+    } else {
+      // Atualização padrão quando não é resposta
+      andamentoAtualizado = await this.prisma.andamento.update({
+        where: { id },
+        data,
+        include: {
+          processo: true,
+          usuario: true,
+          usuarioProrrogacao: true,
+        },
+      });
+    }
 
     // Determina o tipo de ação para o log
     let tipoAcao: $Enums.TipoAcao = $Enums.TipoAcao.ANDAMENTO_ATUALIZADO;
@@ -355,6 +445,28 @@ export class AndamentosService {
         status: andamentoAtualizado.status,
       },
     );
+
+    // Se atualizamos também o processo, registre log específico para o processo
+    if (processoAtualizado) {
+      await this.logsService.criar(
+        $Enums.TipoAcao.PROCESSO_ATUALIZADO,
+        `Processo atualizado por conclusão de andamento: ${processoAtualizado.numero_sei || processoAtualizado.id}`,
+        'processo',
+        processoAtualizado.id,
+        usuario_id,
+        processoPreUpdate
+          ? {
+              data_resposta_final: processoPreUpdate.data_resposta_final,
+              resposta_final: processoPreUpdate.resposta_final,
+            }
+          : null,
+        {
+          data_resposta_final: processoAtualizado.data_resposta_final,
+          resposta_final: processoAtualizado.resposta_final,
+          unidade_respondida_id: processoAtualizado.unidade_respondida_id,
+        },
+      );
+    }
 
     return andamentoAtualizado;
   }

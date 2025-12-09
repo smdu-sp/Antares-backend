@@ -75,6 +75,7 @@ export class ProcessosService {
       data: {
         numero_sei: createProcessoDto.numero_sei,
         assunto: createProcessoDto.assunto,
+        origem: createProcessoDto.origem,
         data_recebimento: createProcessoDto.data_recebimento
           ? new Date(createProcessoDto.data_recebimento)
           : undefined,
@@ -533,7 +534,14 @@ export class ProcessosService {
     // Verifica se o processo existe
     const processoExistente = await this.prisma.processo.findUnique({
       where: { id: processo_id },
-      include: {
+      select: {
+        id: true,
+        origem: true,
+        ativo: true,
+        numero_sei: true,
+        data_resposta_final: true,
+        resposta_final: true,
+        unidade_respondida_id: true,
         andamentos: {
           where: { ativo: true },
           select: { origem: true, destino: true },
@@ -556,19 +564,6 @@ export class ProcessosService {
       );
     }
 
-    // Valida se a unidade respondida existe nos andamentos
-    const unidadesNosAndamentos = new Set<string>();
-    processoExistente.andamentos.forEach((and) => {
-      unidadesNosAndamentos.add(and.origem);
-      unidadesNosAndamentos.add(and.destino);
-    });
-
-    if (!unidadesNosAndamentos.has(unidade_respondida_id)) {
-      throw new BadRequestException(
-        'A unidade respondida não existe nos andamentos deste processo.',
-      );
-    }
-
     // Valida se a data não é futura
     const dataResposta = new Date(data_resposta_final);
     const hoje = new Date();
@@ -580,14 +575,142 @@ export class ProcessosService {
       );
     }
 
-    // Atualiza o processo com a resposta final
-    const processoAtualizado = await this.prisma.processo.update({
-      where: { id: processo_id },
-      data: {
-        data_resposta_final: dataResposta,
-        resposta_final,
-        unidade_respondida_id,
+    // Sempre usa a origem do processo como unidade respondida (mais seguro)
+    const unidadeRespondida = processoExistente.origem;
+
+    // --- Idempotência: evita criar andamento duplicado se já existe conclusão igual ---
+    // Se o processo já possui os mesmos campos de resposta, retorna o processo
+    if (
+      processoExistente.data_resposta_final &&
+      processoExistente.resposta_final === resposta_final &&
+      new Date(processoExistente.data_resposta_final).getTime() ===
+        dataResposta.getTime()
+    ) {
+      const processoAtualizado = await this.prisma.processo.findUnique({
+        where: { id: processo_id },
+        include: {
+          andamentos: {
+            where: { ativo: true },
+            orderBy: { criadoEm: 'desc' },
+            include: {
+              usuario: {
+                select: {
+                  id: true,
+                  nome: true,
+                  nomeSocial: true,
+                  login: true,
+                  email: true,
+                },
+              },
+              usuarioProrrogacao: {
+                select: {
+                  id: true,
+                  nome: true,
+                  nomeSocial: true,
+                  login: true,
+                  email: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      return processoAtualizado;
+    }
+
+    // Se já existe um andamento CONCLUIDO com mesma observação e data_envio, não cria outro
+    const conclusaoExistente = await this.prisma.andamento.findFirst({
+      where: {
+        processo_id,
+        status: $Enums.StatusAndamento.CONCLUIDO,
+        ativo: true,
+        observacao: resposta_final,
+        data_envio: dataResposta,
       },
+    });
+
+    if (conclusaoExistente) {
+      // Garante que o processo tenha os campos de resposta preenchidos
+      if (
+        !processoExistente.data_resposta_final ||
+        !processoExistente.resposta_final
+      ) {
+        await this.prisma.processo.update({
+          where: { id: processo_id },
+          data: {
+            data_resposta_final: dataResposta,
+            resposta_final,
+            unidade_respondida_id: unidadeRespondida,
+          },
+        });
+      }
+
+      const processoAtualizado = await this.prisma.processo.findUnique({
+        where: { id: processo_id },
+        include: {
+          andamentos: {
+            where: { ativo: true },
+            orderBy: { criadoEm: 'desc' },
+            include: {
+              usuario: {
+                select: {
+                  id: true,
+                  nome: true,
+                  nomeSocial: true,
+                  login: true,
+                  email: true,
+                },
+              },
+              usuarioProrrogacao: {
+                select: {
+                  id: true,
+                  nome: true,
+                  nomeSocial: true,
+                  login: true,
+                  email: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      return processoAtualizado;
+    }
+
+    // Executa update do processo e criação do andamento em transação
+    const [updatedProcesso] = await this.prisma.$transaction([
+      this.prisma.processo.update({
+        where: { id: processo_id },
+        data: {
+          data_resposta_final: dataResposta,
+          resposta_final,
+          unidade_respondida_id: unidadeRespondida, // Sempre usa processo.origem
+        },
+      }),
+    ]);
+
+    // Cria o andamento final ligado ao processo (marca conclusão)
+    const andamentoCriado = await this.prisma.andamento.create({
+      data: {
+        processo_id: processo_id,
+        origem: unidadeRespondida,
+        destino: unidadeRespondida,
+        data_envio: dataResposta,
+        prazo: dataResposta,
+        status: $Enums.StatusAndamento.CONCLUIDO,
+        observacao: resposta_final,
+        usuario_id: usuario_id,
+      },
+      include: {
+        usuario: true,
+      },
+    });
+
+    // Busca processo atualizado incluindo andamentos (para retorno)
+    const processoAtualizado = await this.prisma.processo.findUnique({
+      where: { id: processo_id },
       include: {
         andamentos: {
           where: { ativo: true },
@@ -616,12 +739,12 @@ export class ProcessosService {
       },
     });
 
-    // Registra log
+    // Registra log (agora com o andamento criado)
     await this.logsService.criar(
       $Enums.TipoAcao.PROCESSO_ATUALIZADO,
-      `Resposta final criada para processo: ${processoAtualizado.numero_sei} - Unidade respondida: ${unidade_respondida_id}`,
+      `Resposta final criada para processo: ${updatedProcesso.numero_sei} - Unidade respondida: ${unidadeRespondida}`,
       'processo',
-      processoAtualizado.id,
+      updatedProcesso.id,
       usuario_id,
       {
         data_resposta_final: processoExistente.data_resposta_final,
@@ -629,9 +752,9 @@ export class ProcessosService {
         unidade_respondida_id: processoExistente.unidade_respondida_id,
       },
       {
-        data_resposta_final: processoAtualizado.data_resposta_final,
-        resposta_final: processoAtualizado.resposta_final,
-        unidade_respondida_id: processoAtualizado.unidade_respondida_id,
+        data_resposta_final: updatedProcesso.data_resposta_final,
+        resposta_final: updatedProcesso.resposta_final,
+        unidade_respondida_id: updatedProcesso.unidade_respondida_id,
       },
     );
 
@@ -639,35 +762,24 @@ export class ProcessosService {
   }
 
   /**
-   * Busca unidades disponíveis para resposta final
-   * Retorna as unidades únicas que aparecem nos andamentos do processo
+   * Busca unidade respondida para resposta final
+   * Retorna a origem do processo (unidade que será respondida)
    *
    * @param id - ID do processo
-   * @returns Lista de unidades disponíveis
+   * @returns Origem do processo
    */
   async buscarUnidadesResposta(id: string): Promise<{ unidades: string[] }> {
     const processo = await this.prisma.processo.findUnique({
       where: { id },
-      include: {
-        andamentos: {
-          where: { ativo: true },
-          select: { origem: true, destino: true },
-        },
-      },
+      select: { origem: true },
     });
 
     if (!processo) {
       throw new NotFoundException('Processo não encontrado.');
     }
 
-    // Coleta todas as unidades únicas dos andamentos
-    const unidadesSet = new Set<string>();
-    processo.andamentos.forEach((andamento) => {
-      unidadesSet.add(andamento.origem);
-      unidadesSet.add(andamento.destino);
-    });
-
-    return { unidades: Array.from(unidadesSet).sort() };
+    // Retorna apenas a origem do processo como única opção
+    return { unidades: [processo.origem] };
   }
 
   /**

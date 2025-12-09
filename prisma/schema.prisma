@@ -78,6 +78,7 @@ model processo {
   id                      String      @id @default(uuid()) // ID único do processo (UUID gerado automaticamente) - Chave primária
   numero_sei              String      @unique // Número SEI (Sistema Eletrônico de Informações) do processo - String - Obrigatório - Único - Número único que identifica o processo no sistema SEI - Exemplo: "1234567"
   assunto                 String // Assunto do processo - String - Obrigatório - Descrição resumida do que trata o processo - Exemplo: "Solicitação de licença para obra"
+  origem                  String      @default("EXPEDIENTE") // Unidade de origem do processo - String - Obrigatório - Unidade que originou/solicitou o processo - Exemplo: "EXPEDIENTE", "COORDENADORIA_JURIDICA" - Valor padrão: EXPEDIENTE
   data_recebimento        DateTime    @default(now()) // Data em que o gabinete recebeu o processo - DateTime - Valor padrão: Data/hora atual - Pode ser data atual ou anterior
   data_resposta_final     DateTime? // Data em que o gabinete respondeu o processo ao solicitante - DateTime (opcional) - Data de fechamento/conclusão do processo
   resposta_final          String? // Resposta final dada ao processo - String (opcional) - Texto com a resposta/despacho final do processo
