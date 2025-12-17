@@ -79,6 +79,9 @@ export class ProcessosService {
         data_recebimento: createProcessoDto.data_recebimento
           ? new Date(createProcessoDto.data_recebimento)
           : undefined,
+        prazo: createProcessoDto.prazo
+          ? new Date(createProcessoDto.prazo)
+          : undefined,
         unidade_id: usuario.unidade_id,
       },
     });
@@ -463,6 +466,9 @@ export class ProcessosService {
         ...updateProcessoDto,
         data_recebimento: updateProcessoDto.data_recebimento
           ? new Date(updateProcessoDto.data_recebimento)
+          : undefined,
+        prazo: updateProcessoDto.prazo
+          ? new Date(updateProcessoDto.prazo)
           : undefined,
       },
       include: {

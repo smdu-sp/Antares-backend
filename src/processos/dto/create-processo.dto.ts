@@ -50,4 +50,16 @@ export class CreateProcessoDto {
     },
   )
   data_recebimento?: string;
+
+  @ApiProperty({
+    description: 'Prazo limite para conclusão do processo (ISO 8601)',
+    example: '2025-12-31T00:00:00.000Z',
+    required: false,
+  })
+  @IsOptional()
+  @IsDateString(
+    {},
+    { message: 'Prazo deve ser uma data válida no formato ISO 8601.' },
+  )
+  prazo?: string;
 }
