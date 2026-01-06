@@ -34,7 +34,7 @@ export class BatchAndamentoDto {
 
   @ApiProperty({
     description:
-      'Nova data limite para prorrogação (obrigatório apenas para prorrogar)',
+      'Nova data limite para prorrogação (obrigatório apenas para prorrogar). Aceita "novaDataLimite" ou "prazo"',
     example: '2025-12-31T00:00:00.000Z',
     required: false,
   })
@@ -46,4 +46,19 @@ export class BatchAndamentoDto {
     },
   )
   novaDataLimite?: string;
+
+  @ApiProperty({
+    description:
+      'Alternativa para novaDataLimite - data de prorrogação (obrigatório apenas para prorrogar)',
+    example: '2026-01-08',
+    required: false,
+  })
+  @IsOptional()
+  @IsDateString(
+    {},
+    {
+      message: 'Prazo deve ser uma data válida no formato ISO 8601.',
+    },
+  )
+  prazo?: string;
 }

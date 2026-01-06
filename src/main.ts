@@ -8,15 +8,44 @@ import { ValidationPipe } from '@nestjs/common';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  app.useGlobalPipes(new ValidationPipe());
+
+  // 1. PRIMEIRO: Parse do JSON/URL-encoded (para popular req.body)
+  app.use(json({ limit: '50mb' }));
+  app.use(urlencoded({ extended: true, limit: '50mb' }));
+
+  // 2. DEPOIS: Middleware de debug (agora req.body está populado)
+  app.use((req, res, next) => {
+    if (req.url.includes('/andamentos/lote')) {
+      console.log('[MAIN] ========== DEBUG REQUISIÇÃO LOTE ==========');
+      console.log('[MAIN] URL:', req.url);
+      console.log('[MAIN] Method:', req.method);
+      console.log('[MAIN] Content-Type:', req.headers['content-type']);
+      console.log('[MAIN] Body APÓS parse JSON:', JSON.stringify(req.body));
+      console.log('[MAIN] Tipo de req.body:', typeof req.body);
+      console.log('[MAIN] Tipo de req.body.ids:', typeof req.body?.ids);
+      console.log(
+        '[MAIN] Array.isArray(req.body.ids):',
+        Array.isArray(req.body?.ids),
+      );
+    }
+    next();
+  });
+
+  // 3. ValidationPipe com configuração que preserva arrays
+  app.useGlobalPipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: false, // Não remove propriedades não definidas no DTO
+      forbidNonWhitelisted: false,
+    }),
+  );
+
   app.use((req, res, next) => {
     res.json = (data) => {
       return res.send(stringify(data));
     };
     next();
   });
-  app.use(json({ limit: '50mb' }));
-  app.use(urlencoded({ extended: true, limit: '50mb' }));
   const port = process.env.PORT || 3000;
   app.enableCors({ origin: 'http://localhost:3001' });
   const options = new DocumentBuilder()

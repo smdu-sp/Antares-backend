@@ -94,6 +94,22 @@ export class AndamentosController {
   }
 
   /**
+   * PATCH /andamentos/lote
+   * Realiza operações em lote em andamentos (excluir, prorrogar, concluir)
+   * IMPORTANTE: Esta rota deve vir ANTES de @Patch(':id') para não ser capturada como ID
+   */
+  @Permissoes('ADM', 'TEC')
+  @Patch('lote')
+  @ApiOperation({ summary: 'Operações em lote em andamentos' })
+  @ApiResponse({ status: 200, description: 'Operações realizadas com sucesso' })
+  lote(
+    @Body() batchAndamentoDto: BatchAndamentoDto,
+    @UsuarioAtual() usuario: Usuario,
+  ): Promise<{ processados: number; erros: string[] }> {
+    return this.andamentosService.lote(batchAndamentoDto, usuario.id);
+  }
+
+  /**
    * GET /andamentos/:id
    * Busca um andamento por ID
    */
@@ -181,20 +197,5 @@ export class AndamentosController {
     @UsuarioAtual() usuario: Usuario,
   ): Promise<{ removido: boolean }> {
     return this.andamentosService.remover(id, usuario.id);
-  }
-
-  /**
-   * POST /andamentos/lote
-   * Realiza operações em lote em andamentos (excluir, prorrogar, concluir)
-   */
-  @Permissoes('ADM', 'TEC')
-  @Post('lote')
-  @ApiOperation({ summary: 'Operações em lote em andamentos' })
-  @ApiResponse({ status: 200, description: 'Operações realizadas com sucesso' })
-  lote(
-    @Body() batchAndamentoDto: BatchAndamentoDto,
-    @UsuarioAtual() usuario: Usuario,
-  ): Promise<{ processados: number; erros: string[] }> {
-    return this.andamentosService.lote(batchAndamentoDto, usuario.id);
   }
 }
