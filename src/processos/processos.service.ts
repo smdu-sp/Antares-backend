@@ -79,9 +79,15 @@ export class ProcessosService {
       throw new BadRequestException('Usuário não possui unidade atribuída.');
     }
 
+    // Se numero_sei não foi fornecido, gera um temporário para permitir criação de rascunho
+    let numeroSei = createProcessoDto.numero_sei;
+    if (!numeroSei) {
+      numeroSei = `DRAFT-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    }
+
     // Verifica se já existe um processo com o mesmo número SEI
     const processoExistente = await this.prisma.processo.findUnique({
-      where: { numero_sei: createProcessoDto.numero_sei },
+      where: { numero_sei: numeroSei },
     });
 
     if (processoExistente) {
@@ -122,9 +128,9 @@ export class ProcessosService {
     // Cria o processo no banco de dados
     const processo: processo = await this.prisma.processo.create({
       data: {
-        numero_sei: createProcessoDto.numero_sei,
-        assunto: createProcessoDto.assunto,
-        origem: createProcessoDto.origem,
+        numero_sei: numeroSei,
+        assunto: createProcessoDto.assunto || 'Assunto a ser definido',
+        origem: createProcessoDto.origem || 'EXPEDIENTE',
         interessado_id: createProcessoDto.interessado_id || null,
         unidade_remetente_id: createProcessoDto.unidade_remetente_id || null,
         data_recebimento: createProcessoDto.data_recebimento

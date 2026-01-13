@@ -12,28 +12,34 @@ export class CreateProcessoDto {
   @ApiProperty({
     description: 'Número SEI do processo (único)',
     example: '1234567',
+    required: false,
   })
+  @IsOptional()
   @IsString({ message: 'Número SEI deve ser texto.' })
   @MinLength(3, { message: 'Número SEI deve ter ao menos 3 caracteres.' })
-  numero_sei: string;
+  numero_sei?: string;
 
   @ApiProperty({
     description: 'Assunto do processo (máximo 5000 caracteres)',
     example:
       'Solicitação de licença para obra com descrição detalhada dos requisitos técnicos, localização, impacto ambiental e documentação necessária',
+    required: false,
   })
+  @IsOptional()
   @IsString({ message: 'Assunto deve ser texto.' })
   @MinLength(5, { message: 'Assunto deve ter ao menos 5 caracteres.' })
   @MaxLength(5000, { message: 'Assunto deve ter no máximo 5000 caracteres.' })
-  assunto: string;
+  assunto?: string;
 
   @ApiProperty({
     description: 'Unidade de origem do processo',
     example: 'EXPEDIENTE',
+    required: false,
   })
+  @IsOptional()
   @IsString({ message: 'Origem deve ser texto.' })
   @MinLength(2, { message: 'Origem deve ter ao menos 2 caracteres.' })
-  origem: string;
+  origem?: string;
 
   @ApiProperty({
     description: 'ID do interessado no processo',
