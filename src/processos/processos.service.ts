@@ -90,6 +90,26 @@ export class ProcessosService {
       );
     }
 
+    // Verifica se o interessado_id existe (se fornecido)
+    if (createProcessoDto.interessado_id) {
+      const interessado = await this.prisma.interessado.findUnique({
+        where: { id: createProcessoDto.interessado_id },
+      });
+      if (!interessado) {
+        throw new BadRequestException('Interessado não encontrado.');
+      }
+    }
+
+    // Verifica se o unidade_remetente_id existe (se fornecido)
+    if (createProcessoDto.unidade_remetente_id) {
+      const unidadeRemetente = await this.prisma.unidade.findUnique({
+        where: { id: createProcessoDto.unidade_remetente_id },
+      });
+      if (!unidadeRemetente) {
+        throw new BadRequestException('Unidade remetente não encontrada.');
+      }
+    }
+
     // Salva a origem digitada em OrigemProcesso se não existir
     if (createProcessoDto.origem && createProcessoDto.origem.trim() !== '') {
       await this.prisma.origemProcesso.upsert({
@@ -105,6 +125,8 @@ export class ProcessosService {
         numero_sei: createProcessoDto.numero_sei,
         assunto: createProcessoDto.assunto,
         origem: createProcessoDto.origem,
+        interessado_id: createProcessoDto.interessado_id || null,
+        unidade_remetente_id: createProcessoDto.unidade_remetente_id || null,
         data_recebimento: createProcessoDto.data_recebimento
           ? new Date(createProcessoDto.data_recebimento)
           : undefined,
@@ -488,18 +510,107 @@ export class ProcessosService {
       }
     }
 
+    // Processa campos alternativos para interessado e unidade remetente
+    let interessadoId: string | null = null;
+    let unidadeRemetenteId: string | null = null;
+
+    // Se recebeu interessado_id diretamente, valida se existe
+    if (updateProcessoDto.interessado_id) {
+      const interessadoExistente = await this.prisma.interessado.findUnique({
+        where: { id: updateProcessoDto.interessado_id },
+      });
+      if (!interessadoExistente) {
+        throw new BadRequestException('Interessado não encontrado.');
+      }
+      interessadoId = updateProcessoDto.interessado_id;
+    }
+
+    // Se recebeu interessado como string, busca ou cria o interessado
+    if (
+      updateProcessoDto.interessado &&
+      typeof updateProcessoDto.interessado === 'string' &&
+      updateProcessoDto.interessado.trim() !== ''
+    ) {
+      try {
+        // Primeiro tenta encontrar
+        let interessado = await this.prisma.interessado.findFirst({
+          where: { valor: updateProcessoDto.interessado.trim() },
+        });
+
+        // Se não encontrou, cria
+        if (!interessado) {
+          interessado = await this.prisma.interessado.create({
+            data: { valor: updateProcessoDto.interessado.trim() },
+          });
+        }
+
+        interessadoId = interessado.id;
+      } catch (error) {
+        throw new BadRequestException('Erro ao processar interessado.');
+      }
+    }
+
+    // Se recebeu unidade_remetente_id diretamente, valida se existe
+    if (updateProcessoDto.unidade_remetente_id) {
+      const unidadeExistente = await this.prisma.unidade.findUnique({
+        where: { id: updateProcessoDto.unidade_remetente_id },
+      });
+      if (!unidadeExistente) {
+        throw new BadRequestException('Unidade remetente não encontrada.');
+      }
+      unidadeRemetenteId = updateProcessoDto.unidade_remetente_id;
+    }
+
+    // Se recebeu unidade_remetente como string, busca a unidade
+    if (
+      updateProcessoDto.unidade_remetente &&
+      typeof updateProcessoDto.unidade_remetente === 'string' &&
+      updateProcessoDto.unidade_remetente.trim() !== ''
+    ) {
+      const unidade = await this.prisma.unidade.findFirst({
+        where: {
+          OR: [
+            { nome: updateProcessoDto.unidade_remetente.trim() },
+            { sigla: updateProcessoDto.unidade_remetente.trim() },
+          ],
+          ativo: true,
+        },
+      });
+      if (unidade) {
+        unidadeRemetenteId = unidade.id;
+      } else {
+        throw new BadRequestException(
+          `Unidade remetente "${updateProcessoDto.unidade_remetente}" não encontrada.`,
+        );
+      }
+    }
+
+    // Prepara os dados para atualização
+    const dadosAtualizacao: any = {
+      numero_sei: updateProcessoDto.numero_sei,
+      assunto: updateProcessoDto.assunto,
+      origem: updateProcessoDto.origem,
+      data_recebimento: updateProcessoDto.data_recebimento
+        ? new Date(updateProcessoDto.data_recebimento)
+        : undefined,
+      prazo: updateProcessoDto.prazo
+        ? new Date(updateProcessoDto.prazo)
+        : undefined,
+    };
+
+    // Só adiciona os campos de relacionamento se eles tiverem valores
+    if (interessadoId !== null && interessadoId !== undefined) {
+      dadosAtualizacao.interessado_id = interessadoId;
+    }
+
+    if (unidadeRemetenteId !== null && unidadeRemetenteId !== undefined) {
+      dadosAtualizacao.unidade_remetente_id = unidadeRemetenteId;
+    }
+
     // Atualiza o processo
     const processoAtualizado = await this.prisma.processo.update({
       where: { id },
-      data: {
-        ...updateProcessoDto,
-        data_recebimento: updateProcessoDto.data_recebimento
-          ? new Date(updateProcessoDto.data_recebimento)
-          : undefined,
-        prazo: updateProcessoDto.prazo
-          ? new Date(updateProcessoDto.prazo)
-          : undefined,
-      },
+      data: dadosAtualizacao,
       include: {
         andamentos: {
           where: { ativo: true }, // Apenas andamentos ativos

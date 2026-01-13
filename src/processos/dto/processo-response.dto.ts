@@ -20,6 +20,20 @@ export class ProcessoResponseDto implements processo {
   @ApiProperty({ description: 'Unidade de origem do processo' })
   origem: string;
 
+  @ApiProperty({
+    description: 'ID do interessado no processo',
+    required: false,
+    nullable: true,
+  })
+  interessado_id: string | null;
+
+  @ApiProperty({
+    description: 'ID da unidade remetente do processo',
+    required: false,
+    nullable: true,
+  })
+  unidade_remetente_id: string | null;
+
   @ApiProperty({ description: 'Data em que o gabinete recebeu o processo' })
   data_recebimento: Date;
 

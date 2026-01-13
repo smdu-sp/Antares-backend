@@ -6,6 +6,17 @@ model OrigemProcesso {
 
   @@map("origens_processo")
 }
+
+// Model: Interessado | Tabela: interessados | Descrição: Armazena valores únicos de interessados digitados nos processos para autocomplete
+model Interessado {
+  id     String  @id @default(uuid()) // ID único
+  valor  String  @unique // Nome do interessado digitado (texto livre, único)
+  criadoEm DateTime @default(now()) // Data/hora de criação
+
+  processos processo[] // Lista de processos relacionados a este interessado
+
+  @@map("interessados")
+}
 generator client {
   provider = "prisma-client-js"
 }
@@ -53,6 +64,7 @@ model Unidade {
 
   usuarios  Usuario[] // Lista de usuários pertencentes a esta unidade - Array de Usuario - Usuários vinculados à unidade
   processos processo[] // Lista de processos cadastrados por esta unidade - Array de processo - Processos vinculados à unidade
+  processosRemetentes processo[] @relation("UnidadeRemetente") // Lista de processos onde esta unidade é a remetente - Array de processo - Processos remetidos por esta unidade
 
   @@map("unidades")
 }
@@ -85,8 +97,12 @@ model Usuario {
 model processo {
   id                      String      @id @default(uuid()) // ID único do processo (UUID gerado automaticamente) - Chave primária
   numero_sei              String      @unique // Número SEI (Sistema Eletrônico de Informações) do processo - String - Obrigatório - Único - Número único que identifica o processo no sistema SEI - Exemplo: "1234567"
-  assunto                 String // Assunto do processo - String - Obrigatório - Descrição resumida do que trata o processo - Exemplo: "Solicitação de licença para obra"
+  assunto                 String      @db.Text // Assunto do processo - TEXT - Obrigatório - Descrição detalhada do que trata o processo - Suporta textos longos até 65.535 caracteres - Exemplo: "Solicitação de licença para obra com descrição detalhada dos requisitos técnicos, localização, impacto ambiental e documentação necessária"
   origem                  String      @default("EXPEDIENTE") // Unidade de origem do processo - String - Obrigatório - Unidade que originou/solicitou o processo - Exemplo: "EXPEDIENTE", "COORDENADORIA_JURIDICA" - Valor padrão: EXPEDIENTE
+  interessado_id          String? // ID do interessado (chave estrangeira) - String (UUID) - Opcional - Referência ao interessado do processo
+  interessado             Interessado? @relation(fields: [interessado_id], references: [id]) // Relacionamento com o modelo Interessado - Interessado do processo
+  unidade_remetente_id    String? // ID da unidade remetente (chave estrangeira) - String (UUID) - Opcional - Referência à unidade que está remetendo o processo
+  unidadeRemetente        Unidade?    @relation("UnidadeRemetente", fields: [unidade_remetente_id], references: [id]) // Relacionamento com o modelo Unidade - Unidade remetente do processo
   prazo                   DateTime? // Prazo limite para conclusão do processo - DateTime (opcional) - Exemplo: "2025-12-31T00:00:00.000Z"
   data_recebimento        DateTime    @default(now()) // Data em que o gabinete recebeu o processo - DateTime - Valor padrão: Data/hora atual - Pode ser data atual ou anterior
   data_resposta_final     DateTime? // Data em que o gabinete respondeu o processo ao solicitante - DateTime (opcional) - Data de fechamento/conclusão do processo

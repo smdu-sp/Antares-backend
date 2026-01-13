@@ -1,15 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, MinLength, IsDateString, IsOptional } from 'class-validator';
+import {
+  IsString,
+  MinLength,
+  MaxLength,
+  IsDateString,
+  IsOptional,
+  IsUUID,
+} from 'class-validator';
 
-/**
- * DTO (Data Transfer Object) para criar um novo processo
- *
- * DTOs são objetos que definem a estrutura dos dados que serão recebidos
- * pela API. Eles servem para:
- * 1. Validar os dados de entrada
- * 2. Documentar a API (Swagger)
- * 3. Separar a camada de apresentação da camada de negócio
- */
 export class CreateProcessoDto {
   @ApiProperty({
     description: 'Número SEI do processo (único)',
@@ -20,11 +18,13 @@ export class CreateProcessoDto {
   numero_sei: string;
 
   @ApiProperty({
-    description: 'Assunto do processo',
-    example: 'Solicitação de licença para obra',
+    description: 'Assunto do processo (máximo 5000 caracteres)',
+    example:
+      'Solicitação de licença para obra com descrição detalhada dos requisitos técnicos, localização, impacto ambiental e documentação necessária',
   })
   @IsString({ message: 'Assunto deve ser texto.' })
   @MinLength(5, { message: 'Assunto deve ter ao menos 5 caracteres.' })
+  @MaxLength(5000, { message: 'Assunto deve ter no máximo 5000 caracteres.' })
   assunto: string;
 
   @ApiProperty({
@@ -34,6 +34,24 @@ export class CreateProcessoDto {
   @IsString({ message: 'Origem deve ser texto.' })
   @MinLength(2, { message: 'Origem deve ter ao menos 2 caracteres.' })
   origem: string;
+
+  @ApiProperty({
+    description: 'ID do interessado no processo',
+    example: 'uuid-do-interessado',
+    required: false,
+  })
+  @IsOptional()
+  @IsUUID('4', { message: 'ID do interessado deve ser um UUID válido.' })
+  interessado_id?: string;
+
+  @ApiProperty({
+    description: 'ID da unidade remetente do processo',
+    example: 'uuid-da-unidade-remetente',
+    required: false,
+  })
+  @IsOptional()
+  @IsUUID('4', { message: 'ID da unidade remetente deve ser um UUID válido.' })
+  unidade_remetente_id?: string;
 
   @ApiProperty({
     description: 'Data em que o gabinete recebeu o processo (ISO 8601)',
