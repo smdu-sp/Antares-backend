@@ -57,7 +57,9 @@ export class AndamentosService {
     }
 
     // Converte a string de data para Date
-    const prazo = new Date(createAndamentoDto.prazo);
+    const prazo = createAndamentoDto.prazo
+      ? new Date(createAndamentoDto.prazo)
+      : null;
     const data_envio = createAndamentoDto.data_envio
       ? new Date(createAndamentoDto.data_envio)
       : null;
@@ -91,7 +93,7 @@ export class AndamentosService {
     // Registra log
     await this.logsService.criar(
       $Enums.TipoAcao.ANDAMENTO_CRIADO,
-      `Andamento criado: ${andamento.origem} → ${andamento.destino} (Prazo: ${new Date(andamento.prazo).toLocaleDateString('pt-BR')})`,
+      `Andamento criado: ${andamento.origem} → ${andamento.destino}${andamento.prazo ? ` (Prazo: ${new Date(andamento.prazo).toLocaleDateString('pt-BR')})` : ''}`,
       'andamento',
       andamento.id,
       usuario_id,

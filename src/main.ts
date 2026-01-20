@@ -41,7 +41,5 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, options);
   SwaggerModule.setup('', app, document);
   await app.listen(port);
-  console.log('API outorga rodando em http://localhost:' + port);
-  console.log('SwaggerUI rodando em http://localhost:' + port + '/api');
 }
 bootstrap();

@@ -51,11 +51,16 @@ export class CreateAndamentoDto {
   data_envio?: string;
 
   @ApiProperty({
-    description: 'Data limite para retorno do processo',
+    description: 'Data limite para retorno do processo (ISO 8601)',
     example: '2025-12-31T23:59:59.000Z',
+    required: false,
   })
-  @IsDateString({}, { message: 'Prazo deve ser uma data válida.' })
-  prazo: string; // Será convertido para Date no service
+  @IsOptional()
+  @IsDateString(
+    {},
+    { message: 'Prazo deve ser uma data válida no formato ISO 8601.' },
+  )
+  prazo?: string; // Será convertido para Date no service
 
   @ApiProperty({
     description: 'Status do andamento',
