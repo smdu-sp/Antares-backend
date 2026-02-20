@@ -75,6 +75,7 @@ export class AndamentosService {
         status:
           createAndamentoDto.status || $Enums.StatusAndamento.EM_ANDAMENTO,
         observacao: createAndamentoDto.observacao,
+        assunto: createAndamentoDto.assunto,
         usuario_id: usuario_id,
       },
       include: {
@@ -281,6 +282,8 @@ export class AndamentosService {
     // Status não pode ser atualizado manualmente - é definido automaticamente pelas etapas
     if (updateAndamentoDto.observacao !== undefined)
       data.observacao = updateAndamentoDto.observacao;
+    if (updateAndamentoDto.assunto !== undefined)
+      data.assunto = updateAndamentoDto.assunto;
 
     // Trata prorrogação - aceita null para limpar o campo
     if (updateAndamentoDto.prorrogacao !== undefined) {

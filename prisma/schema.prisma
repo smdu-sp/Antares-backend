@@ -135,6 +135,7 @@ model andamento {
   resposta               DateTime? // Data em que o processo recebeu resposta e foi retornado à unidade de origem - DateTime (opcional) - Data em que o processo foi finalizado e devolvido. Se preenchido, o status deve ser CONCLUIDO
   status                 StatusAndamento @default(EM_ANDAMENTO) // Status atual do andamento - Enum (StatusAndamento) - Valor padrão: EM_ANDAMENTO - Valores: EM_ANDAMENTO (em tramitação), CONCLUIDO (concluído e retornado), PRORROGADO (prazo prorrogado)
   observacao             String? // Observações sobre o andamento - String (opcional) - Campo livre para anotações, justificativas de prorrogação, ou outras informações relevantes
+  assunto                String? @db.Text // Assunto específico do andamento - String (TEXT no banco) - Opcional - Campo independente do assunto do processo, pode conter informações específicas sobre este envio/tramitação
   ativo                  Boolean         @default(true) // Indica se o andamento está ativo (true) ou foi excluído logicamente (false) - Boolean - Valor padrão: true
   criadoEm               DateTime        @default(now()) // Data e hora de criação do registro do andamento - DateTime - Valor padrão: Data/hora atual (definido apenas na criação) - Representa a data em que o processo foi enviado da origem para o destino
   atualizadoEm           DateTime        @default(now()) @updatedAt // Data e hora da última atualização do registro - DateTime - Atualizado automaticamente a cada modificação

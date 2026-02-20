@@ -79,4 +79,12 @@ export class CreateAndamentoDto {
   @IsOptional()
   @IsString({ message: 'Observação deve ser texto.' })
   observacao?: string;
+
+  @ApiProperty({
+    description: 'Assunto específico deste andamento',
+    required: false,
+  })
+  @IsOptional()
+  @IsString({ message: 'Assunto deve ser texto.' })
+  assunto?: string;
 }

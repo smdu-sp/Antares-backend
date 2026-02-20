@@ -37,6 +37,9 @@ export class AndamentoResponseDto {
   @ApiProperty({ description: 'Observações', required: false })
   observacao: string | null;
 
+  @ApiProperty({ description: 'Assunto específico do andamento', required: false })
+  assunto: string | null;
+
   @ApiProperty({ description: 'Status ativo/inativo do andamento' })
   ativo: boolean;
 
