@@ -99,7 +99,167 @@ npm run start:prod
 
 Acesse: [http://localhost:3000](http://localhost:3000)
 
-## 📚 Documentação da API
+## � Deploy para Produção
+**📖 Guia completo**: [DEPLOY.md](./DEPLOY.md)
+
+**⚡ Verificação rápida** - Execute antes do deploy:
+
+```powershell
+# Windows PowerShell
+.\pre-deploy-check.ps1
+
+# Linux/Mac
+chmod +x pre-deploy-check.sh
+./pre-deploy-check.sh
+```
+### ✅ Checklist Pré-Deploy
+
+#### 1. Variáveis de Ambiente
+```bash
+# ⚠️ IMPORTANTE: Gerar novos secrets para produção
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"  # JWT_SECRET
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"  # RT_SECRET
+```
+
+Configure o `.env` de produção:
+```env
+# Banco de dados
+DATABASE_URL=mysql://user:password@host:3306/antares
+SGU_DATABASE_URL=mysql://user:password@host:3306/SGU
+
+# Secrets (GERAR NOVOS!)
+JWT_SECRET=<seu_secret_aqui>
+RT_SECRET=<seu_refresh_token_secret_aqui>
+
+# Ambiente
+ENVIRONMENT=production
+
+# LDAP/Active Directory
+LDAP_SERVER=ldap://seu-servidor:389
+LDAP_DOMAIN=@seu-dominio
+LDAP_BASE=DC=seu,DC=dominio
+USER_LDAP=usuario_servico
+PASS_LDAP=senha_servico
+```
+
+#### 2. Executar Migrations Pendentes
+```bash
+# ⚠️ Backup do banco antes de rodar migrations!
+npx prisma migrate deploy --schema=./prisma/schema.prisma
+```
+
+**Migrations recentes:**
+- ✅ `20260223155307_add_preferencias_usuario` - Sistema de preferências do usuário
+- ✅ `20260220155731_add_assunto_to_andamento` - Campo assunto em andamentos
+- ✅ Outras migrations anteriores (ver pasta `prisma/migrations/`)
+
+#### 3. Gerar Prisma Clients
+```bash
+npx prisma generate --schema=./prisma/schema.prisma
+npx prisma generate --schema=./prisma/sgu/schema.prisma
+```
+
+#### 4. Build da Aplicação
+```bash
+# Instalar dependências (produção apenas)
+npm ci --production=false
+
+# Build
+npm run build
+
+# Testar build localmente
+npm run start:prod
+```
+
+#### 5. Verificações Finais
+
+**Checklist:**
+- [ ] `.env` configurado com secrets novos
+- [ ] Migrations aplicadas com sucesso
+- [ ] Prisma clients gerados
+- [ ] Build executado sem erros
+- [ ] Conexão LDAP testada
+- [ ] Conexão com banco de dados testada
+- [ ] Porta 3000 disponível (ou configurar `PORT` no `.env`)
+
+### 🔍 Testes Pós-Deploy
+
+```bash
+# Testar autenticação
+curl -X POST http://localhost:3000/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"login":"usuario","senha":"senha"}'
+
+# Verificar saúde da API
+curl http://localhost:3000/
+
+# Acessar documentação Swagger
+# http://localhost:3000/api
+```
+
+### 📊 Novos Endpoints (Features Recentes)
+
+#### **Preferências de Usuário** (Persistência de configurações)
+```bash
+POST   /preferencias           # Salvar preferência
+GET    /preferencias           # Listar todas
+GET    /preferencias/:chave    # Buscar específica
+DELETE /preferencias/:chave    # Deletar específica
+DELETE /preferencias           # Deletar todas
+```
+
+#### **Exportação** (Excel/PDF)
+```bash
+GET /export/processos/excel     # Exportar processos para Excel
+GET /export/processos/pdf       # Exportar processos para PDF
+GET /export/andamentos/excel    # Exportar andamentos para Excel
+GET /export/andamentos/pdf      # Exportar andamentos para PDF
+```
+
+#### **Contadores para Dashboard**
+
+**Processos:**
+```bash
+GET /processos/contar/total           # Total de processos
+GET /processos/contar/em-andamento    # Em andamento (não concluídos, não atrasados)
+GET /processos/contar/vencendo-hoje   # Vencendo hoje
+GET /processos/contar/atrasados       # Atrasados sem resposta
+GET /processos/contar/concluidos      # Concluídos (com data_resposta_final)
+```
+
+**Andamentos:**
+```bash
+GET /andamentos/contar/concluidos      # Status CONCLUIDO
+GET /andamentos/contar/vencidos        # Não concluídos, prazo vencido
+GET /andamentos/contar/vencendo-hoje   # Não concluídos, prazo hoje
+GET /andamentos/contar/em-andamento    # Não concluídos, prazo futuro
+```
+
+### 🐳 Deploy com Docker (Opcional)
+
+```bash
+# Build da imagem
+docker build -t antares-backend .
+
+# Executar container
+docker run -d \
+  --name antares-backend \
+  -p 3000:3000 \
+  --env-file .env \
+  antares-backend
+```
+
+### 🔄 Rollback em Caso de Problemas
+
+```bash
+# Reverter última migration
+npx prisma migrate resolve --rolled-back <migration_name>
+
+# Restaurar backup do banco
+mysql -u user -p antares < backup.sql
+```
+
+## �📚 Documentação da API
 
 Swagger disponível em: [http://localhost:3000/api](http://localhost:3000/api)
 
@@ -126,9 +286,12 @@ LDAP_DOMAIN=@dominio
 ```
 src/
 ├── andamentos/      # Gestão de andamentos de processos
-├── auth/            # Autenticação e autorização
+├── auth/            # Autenticação e autorização (JWT + LDAP)
+├── export/          # Exportação de dados (Excel/PDF)
+├── interessados/    # Gestão de interessados
 ├── logs/            # Sistema de auditoria
-├── prisma/          # Serviços Prisma
+├── preferencias/    # Preferências do usuário (configurações persistentes)
+├── prisma/          # Serviços Prisma (ORM)
 ├── processos/       # Gestão de processos
 ├── unidades/        # Cadastro de unidades
 └── usuarios/        # Gestão de usuários

@@ -1220,29 +1220,24 @@ export class ProcessosService {
           unidade_id: unidade_id,
         }),
       ativo: true, // Apenas processos ativos
-      andamentos: {
-        some: {
-          ativo: true, // Apenas andamentos ativos
-          status: $Enums.StatusAndamento.EM_ANDAMENTO, // Apenas andamentos em andamento
-          OR: [
-            // Prazo original vencendo hoje (sem prorrogação)
-            {
-              prazo: {
-                gte: hoje,
-                lte: fimDoDia,
-              },
-              prorrogacao: null,
-            },
-            // Prorrogação vencendo hoje
-            {
-              prorrogacao: {
-                gte: hoje,
-                lte: fimDoDia,
-              },
-            },
-          ],
+      data_resposta_final: null, // Apenas processos sem resposta final
+      OR: [
+        // Prazo original vencendo hoje (sem prorrogação)
+        {
+          prazo: {
+            gte: hoje,
+            lte: fimDoDia,
+          },
+          prorrogacao: null,
         },
-      },
+        // Prorrogação vencendo hoje
+        {
+          prorrogacao: {
+            gte: hoje,
+            lte: fimDoDia,
+          },
+        },
+      ],
     };
 
     return await this.prisma.processo.count({
@@ -1252,6 +1247,7 @@ export class ProcessosService {
 
   /**
    * Conta processos atrasados
+   * Atrasados = processos com prazo vencido E sem data de resposta final
    *
    * @param usuario_id - ID do usuário que está buscando (para filtrar por unidade)
    * @returns Número de processos atrasados
@@ -1285,27 +1281,156 @@ export class ProcessosService {
           unidade_id: unidade_id,
         }),
       ativo: true, // Apenas processos ativos
-      andamentos: {
-        some: {
-          ativo: true, // Apenas andamentos ativos
-          status: $Enums.StatusAndamento.EM_ANDAMENTO, // Apenas andamentos em andamento
-          OR: [
-            // Prazo original já venceu (sem prorrogação)
-            {
-              prazo: {
-                lt: hoje,
-              },
-              prorrogacao: null,
-            },
-            // Prorrogação já venceu
-            {
-              prorrogacao: {
-                lt: hoje,
-              },
-            },
-          ],
+      data_resposta_final: null, // Apenas processos sem resposta final
+      OR: [
+        // Prazo original já venceu (sem prorrogação)
+        {
+          prazo: {
+            lt: hoje,
+          },
+          prorrogacao: null,
         },
-      },
+        // Prorrogação já venceu
+        {
+          prorrogacao: {
+            lt: hoje,
+          },
+        },
+      ],
+    };
+
+    return await this.prisma.processo.count({
+      where: searchParams,
+    });
+  }
+
+  async contarConcluidos(usuario_id?: string): Promise<number> {
+    // Busca o usuário para obter permissão e unidade_id
+    let unidade_id: string | undefined;
+    let permissao: string | undefined;
+
+    if (usuario_id) {
+      const usuario = await this.prisma.usuario.findUnique({
+        where: { id: usuario_id },
+        select: { unidade_id: true, permissao: true },
+      });
+
+      if (usuario) {
+        unidade_id = usuario.unidade_id;
+        permissao = usuario.permissao;
+      }
+    }
+
+    const searchParams: any = {
+      // Filtra por unidade do usuário (exceto para DEV e ADM que podem ver todos)
+      ...(unidade_id &&
+        permissao &&
+        !['DEV', 'ADM'].includes(permissao) && {
+          unidade_id: unidade_id,
+        }),
+      ativo: true, // Apenas processos ativos
+      data_resposta_final: { not: null }, // Processos com resposta final
+    };
+
+    return await this.prisma.processo.count({
+      where: searchParams,
+    });
+  }
+
+  /**
+   * Conta total de processos (sem filtros além de ativo)
+   *
+   * @param usuario_id - ID do usuário que está buscando (para filtrar por unidade)
+   * @returns Número total de processos
+   */
+  async contarTotal(usuario_id?: string): Promise<number> {
+    // Busca o usuário para obter permissão e unidade_id
+    let unidade_id: string | undefined;
+    let permissao: string | undefined;
+
+    if (usuario_id) {
+      const usuario = await this.prisma.usuario.findUnique({
+        where: { id: usuario_id },
+        select: { unidade_id: true, permissao: true },
+      });
+
+      if (usuario) {
+        unidade_id = usuario.unidade_id;
+        permissao = usuario.permissao;
+      }
+    }
+
+    const searchParams: any = {
+      // Filtra por unidade do usuário (exceto para DEV e ADM que podem ver todos)
+      ...(unidade_id &&
+        permissao &&
+        !['DEV', 'ADM'].includes(permissao) && {
+          unidade_id: unidade_id,
+        }),
+      ativo: true, // Apenas processos ativos
+    };
+
+    return await this.prisma.processo.count({
+      where: searchParams,
+    });
+  }
+
+  /**
+   * Conta processos em andamento
+   * Em andamento = não concluídos (sem data_resposta_final) E não atrasados (prazo >= hoje ou sem prazo)
+   *
+   * @param usuario_id - ID do usuário que está buscando (para filtrar por unidade)
+   * @returns Número de processos em andamento
+   */
+  async contarEmAndamento(usuario_id?: string): Promise<number> {
+    // Busca o usuário para obter permissão e unidade_id
+    let unidade_id: string | undefined;
+    let permissao: string | undefined;
+
+    if (usuario_id) {
+      const usuario = await this.prisma.usuario.findUnique({
+        where: { id: usuario_id },
+        select: { unidade_id: true, permissao: true },
+      });
+
+      if (usuario) {
+        unidade_id = usuario.unidade_id;
+        permissao = usuario.permissao;
+      }
+    }
+
+    // Calcula início do dia atual
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+
+    const searchParams: any = {
+      // Filtra por unidade do usuário (exceto para DEV e ADM que podem ver todos)
+      ...(unidade_id &&
+        permissao &&
+        !['DEV', 'ADM'].includes(permissao) && {
+          unidade_id: unidade_id,
+        }),
+      ativo: true, // Apenas processos ativos
+      data_resposta_final: null, // Apenas processos sem resposta final (não concluídos)
+      OR: [
+        // Sem prazo definido
+        {
+          prazo: null,
+        },
+        // Prazo original no futuro (sem prorrogação)
+        {
+          prazo: {
+            gte: hoje,
+          },
+          prorrogacao: null,
+        },
+        // Prorrogação no futuro
+        {
+          prorrogacao: {
+            gte: hoje,
+          },
+        },
+      ],
     };
 
     return await this.prisma.processo.count({

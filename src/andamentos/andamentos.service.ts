@@ -662,4 +662,117 @@ export class AndamentosService {
 
     return { processados, erros };
   }
+
+  /**
+   * Conta andamentos concluídos
+   * @returns Número de andamentos concluídos
+   */
+  async contarConcluidos(): Promise<number> {
+    return await this.prisma.andamento.count({
+      where: {
+        ativo: true,
+        status: $Enums.StatusAndamento.CONCLUIDO,
+      },
+    });
+  }
+
+  /**
+   * Conta andamentos vencidos
+   * Vencidos = não concluídos com prazo passado
+   * @returns Número de andamentos vencidos
+   */
+  async contarVencidos(): Promise<number> {
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+
+    return await this.prisma.andamento.count({
+      where: {
+        ativo: true,
+        status: { not: $Enums.StatusAndamento.CONCLUIDO },
+        OR: [
+          // Prazo original já venceu (sem prorrogação)
+          {
+            prazo: {
+              lt: hoje,
+            },
+            prorrogacao: null,
+          },
+          // Prorrogação já venceu
+          {
+            prorrogacao: {
+              lt: hoje,
+            },
+          },
+        ],
+      },
+    });
+  }
+
+  /**
+   * Conta andamentos vencendo hoje
+   * Vencendo hoje = não concluídos com prazo hoje
+   * @returns Número de andamentos vencendo hoje
+   */
+  async contarVencendoHoje(): Promise<number> {
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const fimDoDia = new Date(hoje);
+    fimDoDia.setHours(23, 59, 59, 999);
+
+    return await this.prisma.andamento.count({
+      where: {
+        ativo: true,
+        status: { not: $Enums.StatusAndamento.CONCLUIDO },
+        OR: [
+          // Prazo original vencendo hoje (sem prorrogação)
+          {
+            prazo: {
+              gte: hoje,
+              lte: fimDoDia,
+            },
+            prorrogacao: null,
+          },
+          // Prorrogação vencendo hoje
+          {
+            prorrogacao: {
+              gte: hoje,
+              lte: fimDoDia,
+            },
+          },
+        ],
+      },
+    });
+  }
+
+  /**
+   * Conta andamentos em andamento
+   * Em andamento = não concluídos com prazo futuro
+   * @returns Número de andamentos em andamento
+   */
+  async contarEmAndamento(): Promise<number> {
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+
+    return await this.prisma.andamento.count({
+      where: {
+        ativo: true,
+        status: { not: $Enums.StatusAndamento.CONCLUIDO },
+        OR: [
+          // Prazo original no futuro (sem prorrogação)
+          {
+            prazo: {
+              gte: hoje,
+            },
+            prorrogacao: null,
+          },
+          // Prorrogação no futuro
+          {
+            prorrogacao: {
+              gte: hoje,
+            },
+          },
+        ],
+      },
+    });
+  }
 }

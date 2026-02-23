@@ -88,9 +88,10 @@ model Usuario {
   criadoEm     DateTime @default(now()) // Data e hora de criação do registro do usuário - DateTime - Valor padrão: Data/hora atual (definido apenas na criação)
   atualizadoEm DateTime @default(now()) @updatedAt // Data e hora da última atualização do registro - DateTime - Atualizado automaticamente a cada modificação
 
-  andamentosCriados     andamento[] @relation("AndamentoCriadoPor") // Lista de andamentos criados por este usuário - Array de andamento - Histórico de andamentos criados pelo usuário
-  andamentosProrrogados andamento[] @relation("AndamentoProrrogadoPor") // Lista de andamentos prorrogados por este usuário - Array de andamento - Histórico de andamentos prorrogados pelo usuário
+  andamentosCriados     andamento[]           @relation("AndamentoCriadoPor") // Lista de andamentos criados por este usuário - Array de andamento - Histórico de andamentos criados pelo usuário
+  andamentosProrrogados andamento[]           @relation("AndamentoProrrogadoPor") // Lista de andamentos prorrogados por este usuário - Array de andamento - Histórico de andamentos prorrogados pelo usuário
   logs                  Log[] // Lista de logs de ações realizadas por este usuário - Array de Log - Histórico completo de ações do usuário no sistema
+  preferencias          PreferenciasUsuario[] // Lista de preferências do usuário - Array de PreferenciasUsuario - Configurações personalizadas do usuário
 
   @@map("usuarios")
 }
@@ -168,4 +169,19 @@ model Log {
   @@index([tipoAcao])
   @@index([criadoEm])
   @@map("logs")
+}
+
+// Model: PreferenciasUsuario | Tabela: preferencias_usuario | Descrição: Armazena preferências e configurações personalizadas de cada usuário
+model PreferenciasUsuario {
+  id                  String   @id @default(uuid()) // ID único da preferência (UUID gerado automaticamente) - Chave primária
+  chave               String // Chave identificadora da preferência - String - Obrigatório - Identifica o tipo de preferência (ex: "ag-grid-column-state", "theme", "language") - Exemplo: "ag-grid-column-state"
+  valor               String   @db.Text // Valor da preferência em formato JSON - String (TEXT no banco) - Obrigatório - Armazena o valor da preferência, geralmente em formato JSON
+  criadoEm            DateTime @default(now()) // Data e hora de criação da preferência - DateTime - Valor padrão: Data/hora atual
+  atualizadoEm        DateTime @default(now()) @updatedAt // Data e hora da última atualização - DateTime - Atualizado automaticamente
+  usuario_id          String // ID do usuário dono da preferência (chave estrangeira) - String (UUID) - Obrigatório
+  usuario             Usuario  @relation(fields: [usuario_id], references: [id], onDelete: Cascade) // Relacionamento com Usuario - Deleta preferências se usuário for deletado
+
+  @@unique([usuario_id, chave]) // Cada usuário pode ter apenas uma preferência por chave
+  @@index([usuario_id])
+  @@map("preferencias_usuario")
 }

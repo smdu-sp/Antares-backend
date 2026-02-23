@@ -76,6 +76,68 @@ export class AndamentosController {
   }
 
   /**
+   * GET /andamentos/contar/concluidos
+   * Conta andamentos concluídos
+   */
+  @Permissoes('ADM', 'TEC', 'USR')
+  @Get('contar/concluidos')
+  @ApiOperation({ summary: 'Conta andamentos concluídos' })
+  @ApiResponse({ status: 200, description: 'Número de andamentos concluídos' })
+  contarConcluidos(): Promise<{ total: number }> {
+    return this.andamentosService
+      .contarConcluidos()
+      .then((total) => ({ total }));
+  }
+
+  /**
+   * GET /andamentos/contar/vencidos
+   * Conta andamentos vencidos
+   */
+  @Permissoes('ADM', 'TEC', 'USR')
+  @Get('contar/vencidos')
+  @ApiOperation({ summary: 'Conta andamentos vencidos' })
+  @ApiResponse({ status: 200, description: 'Número de andamentos vencidos' })
+  contarVencidos(): Promise<{ total: number }> {
+    return this.andamentosService
+      .contarVencidos()
+      .then((total) => ({ total }));
+  }
+
+  /**
+   * GET /andamentos/contar/vencendo-hoje
+   * Conta andamentos vencendo hoje
+   */
+  @Permissoes('ADM', 'TEC', 'USR')
+  @Get('contar/vencendo-hoje')
+  @ApiOperation({ summary: 'Conta andamentos vencendo hoje' })
+  @ApiResponse({
+    status: 200,
+    description: 'Número de andamentos vencendo hoje',
+  })
+  contarVencendoHoje(): Promise<{ total: number }> {
+    return this.andamentosService
+      .contarVencendoHoje()
+      .then((total) => ({ total }));
+  }
+
+  /**
+   * GET /andamentos/contar/em-andamento
+   * Conta andamentos em andamento
+   */
+  @Permissoes('ADM', 'TEC', 'USR')
+  @Get('contar/em-andamento')
+  @ApiOperation({ summary: 'Conta andamentos em andamento' })
+  @ApiResponse({
+    status: 200,
+    description: 'Número de andamentos em andamento',
+  })
+  contarEmAndamento(): Promise<{ total: number }> {
+    return this.andamentosService
+      .contarEmAndamento()
+      .then((total) => ({ total }));
+  }
+
+  /**
    * GET /andamentos/processo/:processo_id
    * Busca todos os andamentos de um processo específico
    */

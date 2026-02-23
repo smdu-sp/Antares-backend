@@ -8,6 +8,8 @@ import { AndamentosModule } from './andamentos/andamentos.module';
 import { LogsModule } from './logs/logs.module';
 import { UnidadesModule } from './unidades/unidades.module';
 import { InteressadosModule } from './interessados/interessados.module';
+import { ExportModule } from './export/export.module';
+import { PreferenciasModule } from './preferencias/preferencias.module';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RoleGuard } from './auth/guards/role.guard';
@@ -24,6 +26,8 @@ import { RoleGuard } from './auth/guards/role.guard';
     LogsModule,
     UnidadesModule,
     InteressadosModule,
+    ExportModule,
+    PreferenciasModule,
   ],
   providers: [
     AppService,

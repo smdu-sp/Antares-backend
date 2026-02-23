@@ -132,6 +132,44 @@ export class ProcessosController {
   }
 
   /**
+   * GET /processos/contar/total
+   * Conta total de processos
+   */
+  @Permissoes('ADM', 'TEC', 'USR')
+  @Get('contar/total')
+  @ApiOperation({ summary: 'Conta total de processos' })
+  @ApiResponse({
+    status: 200,
+    description: 'Número total de processos',
+  })
+  contarTotal(
+    @UsuarioAtual() usuario?: Usuario,
+  ): Promise<{ total: number }> {
+    return this.processosService
+      .contarTotal(usuario?.id)
+      .then((total) => ({ total }));
+  }
+
+  /**
+   * GET /processos/contar/em-andamento
+   * Conta processos em andamento (não concluídos e não atrasados)
+   */
+  @Permissoes('ADM', 'TEC', 'USR')
+  @Get('contar/em-andamento')
+  @ApiOperation({ summary: 'Conta processos em andamento' })
+  @ApiResponse({
+    status: 200,
+    description: 'Número de processos em andamento',
+  })
+  contarEmAndamento(
+    @UsuarioAtual() usuario?: Usuario,
+  ): Promise<{ total: number }> {
+    return this.processosService
+      .contarEmAndamento(usuario?.id)
+      .then((total) => ({ total }));
+  }
+
+  /**
    * GET /processos/contar/vencendo-hoje
    * Conta processos vencendo hoje
    */
@@ -163,6 +201,22 @@ export class ProcessosController {
   ): Promise<{ total: number }> {
     return this.processosService
       .contarAtrasados(usuario?.id)
+      .then((total) => ({ total }));
+  }
+
+  /**
+   * GET /processos/contar/concluidos
+   * Conta processos concluídos
+   */
+  @Permissoes('ADM', 'TEC', 'USR')
+  @Get('contar/concluidos')
+  @ApiOperation({ summary: 'Conta processos concluídos' })
+  @ApiResponse({ status: 200, description: 'Número de processos concluídos' })
+  contarConcluidos(
+    @UsuarioAtual() usuario?: Usuario,
+  ): Promise<{ total: number }> {
+    return this.processosService
+      .contarConcluidos(usuario?.id)
       .then((total) => ({ total }));
   }
 

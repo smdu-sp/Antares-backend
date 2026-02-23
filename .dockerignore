@@ -1,0 +1,51 @@
+# Dependências
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# Build
+dist/
+build/
+
+# Desenvolvimento
+.env
+.env.local
+.env.*.local
+
+# IDEs e editores
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+logs/
+*.log
+error.log
+output.log
+
+# Git
+.git/
+.gitignore
+
+# Testes
+coverage/
+.nyc_output/
+test/
+
+# Temporários
+tmp/
+temp/
+*.tmp
+
+# Outros
+README.md
+DEPLOY.md
+.prettierrc
+.eslintrc.js
+tsconfig.spec.json
