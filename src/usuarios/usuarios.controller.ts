@@ -15,7 +15,14 @@ import { Permissoes } from 'src/auth/decorators/permissoes.decorator';
 import { UsuarioAtual } from 'src/auth/decorators/usuario-atual.decorator';
 import { Usuario } from '@prisma/client';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { BuscarNovoResponseDTO, UsuarioAutorizadoResponseDTO, UsuarioDesativadoResponseDTO, UsuarioPaginadoResponseDTO, UsuarioResponseDTO } from './dto/usuario-response.dto';
+import {
+  BuscarNovoResponseDTO,
+  UsuarioAutorizadoResponseDTO,
+  UsuarioDesativadoResponseDTO,
+  UsuarioPaginadoResponseDTO,
+  UsuarioResponseDTO,
+} from './dto/usuario-response.dto';
+import { AtualizarPermissoesDevDto } from './dto/atualizar-permissoes-dev.dto';
 
 @ApiTags('Usuarios')
 @ApiBearerAuth()
@@ -41,7 +48,13 @@ export class UsuariosController {
     @Query('status') status?: string,
     @Query('permissao') permissao?: string,
   ): Promise<UsuarioPaginadoResponseDTO> {
-    return this.usuariosService.buscarTudo(+pagina, +limite, busca, status, permissao);
+    return this.usuariosService.buscarTudo(
+      +pagina,
+      +limite,
+      busca,
+      status,
+      permissao,
+    );
   }
 
   @Permissoes('ADM')
@@ -55,7 +68,7 @@ export class UsuariosController {
   atualizar(
     @UsuarioAtual() usuario: Usuario,
     @Param('id') id: string,
-    @Body() updateUsuarioDto: UpdateUsuarioDto
+    @Body() updateUsuarioDto: UpdateUsuarioDto,
   ): Promise<UsuarioResponseDTO> {
     return this.usuariosService.atualizar(usuario, id, updateUsuarioDto);
   }
@@ -68,7 +81,7 @@ export class UsuariosController {
 
   @Permissoes('ADM')
   @Get('buscar-tecnicos')
-  buscarTecnicos(): Promise<{ id: string, nome: string }[]> {
+  buscarTecnicos(): Promise<{ id: string; nome: string }[]> {
     return this.usuariosService.buscarTecnicos();
   }
 
@@ -80,7 +93,9 @@ export class UsuariosController {
 
   @Permissoes('ADM')
   @Patch('autorizar/:id')
-  autorizarUsuario(@Param('id') id: string): Promise<UsuarioAutorizadoResponseDTO> {
+  autorizarUsuario(
+    @Param('id') id: string,
+  ): Promise<UsuarioAutorizadoResponseDTO> {
     return this.usuariosService.autorizaUsuario(id);
   }
 
@@ -93,5 +108,32 @@ export class UsuariosController {
   @Get('buscar-novo/:login')
   buscarNovo(@Param('login') login: string): Promise<BuscarNovoResponseDTO> {
     return this.usuariosService.buscarNovo(login);
+  }
+
+  @Permissoes('DEV')
+  @Get('admin/dev/permissoes')
+  listarPermissoesDev(
+    @Query('pagina') pagina?: string,
+    @Query('limite') limite?: string,
+    @Query('busca') busca?: string,
+    @Query('permissao') permissao?: string,
+    @Query('status') status?: string,
+  ): Promise<UsuarioPaginadoResponseDTO> {
+    return this.usuariosService.listarPermissoesDev(
+      +pagina,
+      +limite,
+      busca,
+      permissao,
+      status,
+    );
+  }
+
+  @Permissoes('DEV')
+  @Patch('admin/dev/permissoes/:id')
+  atualizarPermissoesDev(
+    @Param('id') id: string,
+    @Body() dto: AtualizarPermissoesDevDto,
+  ): Promise<UsuarioResponseDTO> {
+    return this.usuariosService.atualizarPermissoesDev(id, dto);
   }
 }

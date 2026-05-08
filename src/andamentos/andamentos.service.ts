@@ -3,13 +3,14 @@ import {
   NotFoundException,
   BadRequestException,
   InternalServerErrorException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateAndamentoDto } from './dto/create-andamento.dto';
 import { UpdateAndamentoDto } from './dto/update-andamento.dto';
 import { BatchAndamentoDto } from './dto/batch-andamento.dto';
 import { AndamentoResponseDto } from './dto/andamento-response.dto';
-import { andamento, $Enums } from '@prisma/client';
+import { andamento, $Enums, GrupoCodigo } from '@prisma/client';
 import { AppService } from 'src/app.service';
 import { LogsService } from 'src/logs/logs.service';
 
@@ -21,11 +22,353 @@ import { LogsService } from 'src/logs/logs.service';
  */
 @Injectable()
 export class AndamentosService {
+  private readonly strictGroupMode = true;
+  private readonly CHAVE_GRUPO_ATIVO = 'auth.grupo_ativo_id';
+
   constructor(
     private prisma: PrismaService,
     private app: AppService,
     private logsService: LogsService,
   ) {}
+
+  private async usuarioEhMasterGlobal(usuarioId?: string) {
+    if (!usuarioId) {
+      return false;
+    }
+
+    const vinculo = await this.prisma.usuarioGrupo.findFirst({
+      where: {
+        usuario_id: usuarioId,
+        ativo: true,
+        grupo: {
+          ativo: true,
+          codigo: GrupoCodigo.GLOBAL,
+        },
+      },
+      select: { id: true },
+    });
+
+    return !!vinculo;
+  }
+
+  private async usuarioTemVisualizacaoGabinete(usuarioId?: string) {
+    if (!usuarioId) {
+      return false;
+    }
+
+    const grupoAtivoId = await this.obterGrupoAtivoId(usuarioId);
+
+    if (!grupoAtivoId) {
+      return false;
+    }
+
+    const permissao = await this.prisma.usuarioGrupoPermissao.findFirst({
+      where: {
+        ativo: true,
+        visualizar_grupo: true,
+        usuarioGrupo: {
+          ativo: true,
+          usuario_id: usuarioId,
+          grupo_id: grupoAtivoId,
+          grupo: {
+            ativo: true,
+            codigo: GrupoCodigo.GABINETE,
+          },
+        },
+      },
+      select: { id: true },
+    });
+
+    return !!permissao;
+  }
+
+  private async obterGrupoAtivoId(usuarioId: string): Promise<string | null> {
+    const preferencia = await this.prisma.preferenciasUsuario.findUnique({
+      where: {
+        usuario_id_chave: {
+          usuario_id: usuarioId,
+          chave: this.CHAVE_GRUPO_ATIVO,
+        },
+      },
+      select: {
+        valor: true,
+        ativo: true,
+      },
+    });
+
+    if (preferencia?.ativo && preferencia.valor) {
+      const vinculoPreferido = await this.prisma.usuarioGrupo.findFirst({
+        where: {
+          usuario_id: usuarioId,
+          grupo_id: preferencia.valor,
+          ativo: true,
+          grupo: {
+            ativo: true,
+          },
+        },
+        select: { grupo_id: true },
+      });
+
+      if (vinculoPreferido) {
+        return vinculoPreferido.grupo_id;
+      }
+    }
+
+    const vinculo = await this.prisma.usuarioGrupo.findFirst({
+      where: {
+        usuario_id: usuarioId,
+        ativo: true,
+        grupo: {
+          ativo: true,
+        },
+      },
+      orderBy: [{ criadoEm: 'asc' }],
+      select: { grupo_id: true },
+    });
+
+    return vinculo?.grupo_id || null;
+  }
+
+  private async usuarioTemPermissaoNoProcesso(
+    usuarioId: string,
+    processoId: string,
+    acao: 'visualizar' | 'modificar' | 'excluir',
+  ): Promise<boolean> {
+    const ehMasterGlobal = await this.usuarioEhMasterGlobal(usuarioId);
+
+    if (ehMasterGlobal) {
+      return true;
+    }
+
+    const grupoAtivoId = await this.obterGrupoAtivoId(usuarioId);
+
+    if (!grupoAtivoId) {
+      return false;
+    }
+
+    const processo = await this.prisma.processo.findUnique({
+      where: { id: processoId },
+      select: {
+        usuario_atribuido_id: true,
+        grupos: {
+          where: { ativo: true },
+          select: { grupo: { select: { id: true } } },
+        },
+      },
+    });
+
+    if (!processo) {
+      return false;
+    }
+
+    const grupoIds = processo.grupos.map((item) => item.grupo.id);
+
+    if (grupoIds.length === 0) {
+      return false;
+    }
+
+    if (!grupoIds.includes(grupoAtivoId)) {
+      return false;
+    }
+
+    const permissoes = await this.prisma.usuarioGrupoPermissao.findMany({
+      where: {
+        ativo: true,
+        usuarioGrupo: {
+          ativo: true,
+          usuario_id: usuarioId,
+          grupo_id: grupoAtivoId,
+          grupo: {
+            ativo: true,
+          },
+        },
+      },
+      select: {
+        visualizar_grupo: true,
+        visualizar_proprios: true,
+        modificar_grupo: true,
+        modificar_proprios: true,
+        excluir: true,
+      },
+    });
+
+    if (permissoes.length === 0) {
+      return false;
+    }
+
+    const isProprio = processo.usuario_atribuido_id === usuarioId;
+
+    if (acao === 'excluir') {
+      return permissoes.some((item) => item.excluir);
+    }
+
+    if (acao === 'modificar') {
+      return permissoes.some(
+        (item) =>
+          item.modificar_grupo || (item.modificar_proprios && isProprio),
+      );
+    }
+
+    return permissoes.some(
+      (item) =>
+        item.visualizar_grupo || (item.visualizar_proprios && isProprio),
+    );
+  }
+
+  private async garantirPermissaoProcesso(
+    usuarioId: string,
+    processoId: string,
+    acao: 'visualizar' | 'modificar' | 'excluir',
+  ) {
+    const ehMasterGlobal = await this.usuarioEhMasterGlobal(usuarioId);
+
+    if (ehMasterGlobal) {
+      return;
+    }
+
+    const temVisualizacaoGabinete =
+      await this.usuarioTemVisualizacaoGabinete(usuarioId);
+
+    if (temVisualizacaoGabinete) {
+      return;
+    }
+
+    const temPermissaoGrupo = await this.usuarioTemPermissaoNoProcesso(
+      usuarioId,
+      processoId,
+      acao,
+    );
+
+    if (temPermissaoGrupo) {
+      return;
+    }
+
+    throw new ForbiddenException(
+      'Você não tem permissão de grupo para acessar este processo.',
+    );
+  }
+
+  private async montarFiltrosVisibilidadeAndamentos(usuarioId?: string) {
+    if (!usuarioId) {
+      return { semAcesso: false, filtros: [] as any[] };
+    }
+
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { id: usuarioId },
+      select: {
+        unidade_id: true,
+        permissao: true,
+      },
+    });
+
+    if (!usuario) {
+      return { semAcesso: true, filtros: [] as any[] };
+    }
+
+    if (['DEV', 'ADM'].includes(usuario.permissao)) {
+      return { semAcesso: false, filtros: [] as any[] };
+    }
+
+    const ehMasterGlobal = await this.usuarioEhMasterGlobal(usuarioId);
+
+    if (ehMasterGlobal) {
+      return { semAcesso: false, filtros: [] as any[] };
+    }
+
+    const grupoAtivoId = await this.obterGrupoAtivoId(usuarioId);
+
+    if (!grupoAtivoId) {
+      return { semAcesso: true, filtros: [] as any[] };
+    }
+
+    const temVisualizacaoGabinete =
+      await this.usuarioTemVisualizacaoGabinete(usuarioId);
+
+    if (temVisualizacaoGabinete) {
+      return { semAcesso: false, filtros: [] as any[] };
+    }
+
+    const permissoesGrupo = await this.prisma.usuarioGrupoPermissao.findMany({
+      where: {
+        ativo: true,
+        OR: [{ visualizar_grupo: true }, { visualizar_proprios: true }],
+        usuarioGrupo: {
+          ativo: true,
+          usuario_id: usuarioId,
+          grupo_id: grupoAtivoId,
+          grupo: {
+            ativo: true,
+          },
+        },
+      },
+      select: {
+        visualizar_grupo: true,
+        visualizar_proprios: true,
+        usuarioGrupo: {
+          select: {
+            grupo_id: true,
+          },
+        },
+      },
+    });
+
+    if (permissoesGrupo.length > 0) {
+      const gruposComVisualizacao = Array.from(
+        new Set(
+          permissoesGrupo
+            .filter((item) => item.visualizar_grupo)
+            .map((item) => item.usuarioGrupo.grupo_id),
+        ),
+      );
+
+      const podeVisualizarProprios = permissoesGrupo.some(
+        (item) => item.visualizar_proprios,
+      );
+
+      const filtrosGrupo: any[] = [];
+
+      if (gruposComVisualizacao.length > 0) {
+        filtrosGrupo.push({
+          processo: {
+            grupos: {
+              some: {
+                ativo: true,
+                grupo_id: {
+                  in: gruposComVisualizacao,
+                },
+              },
+            },
+          },
+        });
+      }
+
+      if (podeVisualizarProprios) {
+        filtrosGrupo.push({
+          AND: [
+            { processo: { usuario_atribuido_id: usuarioId } },
+            {
+              processo: {
+                grupos: {
+                  some: {
+                    ativo: true,
+                    grupo_id: grupoAtivoId,
+                  },
+                },
+              },
+            },
+          ],
+        });
+      }
+
+      if (filtrosGrupo.length === 0) {
+        return { semAcesso: true, filtros: [] as any[] };
+      }
+
+      return { semAcesso: false, filtros: [{ OR: filtrosGrupo }] };
+    }
+
+    return { semAcesso: true, filtros: [] as any[] };
+  }
 
   /**
    * Cria um novo andamento (envia processo de uma unidade para outra)
@@ -124,6 +467,7 @@ export class AndamentosService {
     limite: number = 10,
     processo_id?: string,
     status?: string,
+    usuario_id?: string,
   ): Promise<{
     total: number;
     pagina: number;
@@ -132,7 +476,18 @@ export class AndamentosService {
   }> {
     [pagina, limite] = this.app.verificaPagina(pagina, limite);
 
-    const searchParams = {
+    const visibilidade =
+      await this.montarFiltrosVisibilidadeAndamentos(usuario_id);
+
+    if (visibilidade.semAcesso) {
+      return { total: 0, pagina: 0, limite: 0, data: [] };
+    }
+
+    const searchParams: any = {
+      ativo: true,
+      ...(visibilidade.filtros.length > 0
+        ? { AND: [...visibilidade.filtros] }
+        : {}),
       ...(processo_id && { processo_id }),
       ...(status &&
         status !== '' && { status: status as $Enums.StatusAndamento }),
@@ -176,6 +531,7 @@ export class AndamentosService {
    */
   async buscarPorProcesso(
     processo_id: string,
+    usuario_id?: string,
   ): Promise<AndamentoResponseDto[]> {
     if (!processo_id || processo_id === '') {
       throw new BadRequestException('ID do processo é obrigatório.');
@@ -187,6 +543,14 @@ export class AndamentosService {
 
     if (!processo) {
       throw new NotFoundException('Processo não encontrado.');
+    }
+
+    if (usuario_id) {
+      await this.garantirPermissaoProcesso(
+        usuario_id,
+        processo_id,
+        'visualizar',
+      );
     }
 
     const andamentos = await this.prisma.andamento.findMany({
@@ -211,7 +575,10 @@ export class AndamentosService {
    * @param id - ID do andamento
    * @returns Andamento encontrado
    */
-  async buscarPorId(id: string): Promise<AndamentoResponseDto> {
+  async buscarPorId(
+    id: string,
+    usuario_id?: string,
+  ): Promise<AndamentoResponseDto> {
     if (!id || id === '') {
       throw new BadRequestException('ID do andamento é obrigatório.');
     }
@@ -227,6 +594,14 @@ export class AndamentosService {
 
     if (!andamento || !andamento.ativo) {
       throw new NotFoundException(`Andamento não encontrado ou inativo: ${id}`);
+    }
+
+    if (usuario_id) {
+      await this.garantirPermissaoProcesso(
+        usuario_id,
+        andamento.processo_id,
+        'visualizar',
+      );
     }
 
     return andamento;
@@ -247,7 +622,12 @@ export class AndamentosService {
     usuario_id: string,
   ): Promise<AndamentoResponseDto> {
     // Verifica se o andamento existe
-    await this.buscarPorId(id);
+    const andamentoAtual = await this.buscarPorId(id, usuario_id);
+    await this.garantirPermissaoProcesso(
+      usuario_id,
+      andamentoAtual.processo_id,
+      'modificar',
+    );
 
     // Normaliza payloads inesperados do frontend:
     // - aceita campo `conclusao` como sinônimo de `resposta` (data)
@@ -488,7 +868,13 @@ export class AndamentosService {
     id: string,
     usuario_id: string,
   ): Promise<AndamentoResponseDto> {
-    const andamento = await this.buscarPorId(id);
+    const andamento = await this.buscarPorId(id, usuario_id);
+
+    await this.garantirPermissaoProcesso(
+      usuario_id,
+      andamento.processo_id,
+      'modificar',
+    );
 
     if (andamento.status === $Enums.StatusAndamento.CONCLUIDO) {
       throw new BadRequestException('Andamento já está concluído.');
@@ -517,7 +903,13 @@ export class AndamentosService {
     novaDataLimite: string,
     usuario_id: string,
   ): Promise<AndamentoResponseDto> {
-    const andamento = await this.buscarPorId(id);
+    const andamento = await this.buscarPorId(id, usuario_id);
+
+    await this.garantirPermissaoProcesso(
+      usuario_id,
+      andamento.processo_id,
+      'modificar',
+    );
 
     const novaData = new Date(novaDataLimite);
     const dataAtual = new Date();
@@ -547,7 +939,13 @@ export class AndamentosService {
     id: string,
     usuario_id: string,
   ): Promise<{ removido: boolean }> {
-    const andamento = await this.buscarPorId(id);
+    const andamento = await this.buscarPorId(id, usuario_id);
+
+    await this.garantirPermissaoProcesso(
+      usuario_id,
+      andamento.processo_id,
+      'excluir',
+    );
 
     // Remove o andamento (soft delete - marca como inativo)
     await this.prisma.andamento.update({
@@ -667,9 +1065,19 @@ export class AndamentosService {
    * Conta andamentos concluídos
    * @returns Número de andamentos concluídos
    */
-  async contarConcluidos(): Promise<number> {
+  async contarConcluidos(usuario_id?: string): Promise<number> {
+    const visibilidade =
+      await this.montarFiltrosVisibilidadeAndamentos(usuario_id);
+
+    if (visibilidade.semAcesso) {
+      return 0;
+    }
+
     return await this.prisma.andamento.count({
       where: {
+        ...(visibilidade.filtros.length > 0
+          ? { AND: [...visibilidade.filtros] }
+          : {}),
         ativo: true,
         status: $Enums.StatusAndamento.CONCLUIDO,
       },
@@ -681,12 +1089,22 @@ export class AndamentosService {
    * Vencidos = não concluídos com prazo passado
    * @returns Número de andamentos vencidos
    */
-  async contarVencidos(): Promise<number> {
+  async contarVencidos(usuario_id?: string): Promise<number> {
+    const visibilidade =
+      await this.montarFiltrosVisibilidadeAndamentos(usuario_id);
+
+    if (visibilidade.semAcesso) {
+      return 0;
+    }
+
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
 
     return await this.prisma.andamento.count({
       where: {
+        ...(visibilidade.filtros.length > 0
+          ? { AND: [...visibilidade.filtros] }
+          : {}),
         ativo: true,
         status: { not: $Enums.StatusAndamento.CONCLUIDO },
         OR: [
@@ -713,7 +1131,14 @@ export class AndamentosService {
    * Vencendo hoje = não concluídos com prazo hoje
    * @returns Número de andamentos vencendo hoje
    */
-  async contarVencendoHoje(): Promise<number> {
+  async contarVencendoHoje(usuario_id?: string): Promise<number> {
+    const visibilidade =
+      await this.montarFiltrosVisibilidadeAndamentos(usuario_id);
+
+    if (visibilidade.semAcesso) {
+      return 0;
+    }
+
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
     const fimDoDia = new Date(hoje);
@@ -721,6 +1146,9 @@ export class AndamentosService {
 
     return await this.prisma.andamento.count({
       where: {
+        ...(visibilidade.filtros.length > 0
+          ? { AND: [...visibilidade.filtros] }
+          : {}),
         ativo: true,
         status: { not: $Enums.StatusAndamento.CONCLUIDO },
         OR: [
@@ -749,12 +1177,22 @@ export class AndamentosService {
    * Em andamento = não concluídos com prazo futuro
    * @returns Número de andamentos em andamento
    */
-  async contarEmAndamento(): Promise<number> {
+  async contarEmAndamento(usuario_id?: string): Promise<number> {
+    const visibilidade =
+      await this.montarFiltrosVisibilidadeAndamentos(usuario_id);
+
+    if (visibilidade.semAcesso) {
+      return 0;
+    }
+
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
 
     return await this.prisma.andamento.count({
       where: {
+        ...(visibilidade.filtros.length > 0
+          ? { AND: [...visibilidade.filtros] }
+          : {}),
         ativo: true,
         status: { not: $Enums.StatusAndamento.CONCLUIDO },
         OR: [

@@ -7,6 +7,7 @@ import {
   Request,
   Get,
   Body,
+  Patch,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LocalAuthGuard } from './guards/local-auth.guard';
@@ -24,9 +25,9 @@ import {
 } from '@nestjs/swagger';
 import { UsuarioToken } from './models/UsuarioToken';
 import { LoginDto } from './models/login.dto';
-import { EuResponseDTO } from './models/eu-response.dto';
 import { UsuariosService } from 'src/usuarios/usuarios.service';
 import { UsuarioResponseDTO } from 'src/usuarios/dto/usuario-response.dto';
+import { DefinirGrupoAtivoDto } from './models/definir-grupo-ativo.dto';
 
 @ApiBearerAuth()
 @ApiTags('Auth')
@@ -34,7 +35,7 @@ import { UsuarioResponseDTO } from 'src/usuarios/dto/usuario-response.dto';
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
-    private readonly usuariosService: UsuariosService
+    private readonly usuariosService: UsuariosService,
   ) {}
 
   @Post('login')
@@ -57,7 +58,7 @@ export class AuthController {
     return this.authService.refresh(usuario);
   }
 
-  @Get('eu')
+  @Get('usuario-atual')
   @ApiResponse({
     status: 200,
     description: 'Retorna 200 se o sistema encontrar o usuário logado.',
@@ -65,5 +66,22 @@ export class AuthController {
   })
   usuarioAtual(@UsuarioAtual() usuario: Usuario) {
     return this.usuariosService.buscarPorId(usuario.id);
+  }
+
+  @Get('grupo-ativo')
+  @ApiOperation({
+    summary: 'Retorna o grupo ativo e grupos disponiveis do usuario',
+  })
+  obterGrupoAtivo(@UsuarioAtual() usuario: Usuario) {
+    return this.authService.obterGrupoAtivo(usuario.id);
+  }
+
+  @Patch('grupo-ativo')
+  @ApiOperation({ summary: 'Define o grupo ativo do usuario autenticado' })
+  definirGrupoAtivo(
+    @UsuarioAtual() usuario: Usuario,
+    @Body() dto: DefinirGrupoAtivoDto,
+  ) {
+    return this.authService.definirGrupoAtivo(usuario.id, dto.grupoId);
   }
 }

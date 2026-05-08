@@ -152,4 +152,14 @@ export class CreateProcessoDto {
     },
   )
   data_resposta_final?: string;
+
+  @ApiProperty({
+    description:
+      'ID do usuário atribuído ao processo (principalmente para SERVIN)',
+    example: 'uuid-do-usuario-atribuido',
+    required: false,
+  })
+  @IsOptional()
+  @IsUUID('4', { message: 'ID do usuário atribuído deve ser um UUID válido.' })
+  usuario_atribuido_id?: string;
 }

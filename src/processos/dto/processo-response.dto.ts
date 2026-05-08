@@ -83,6 +83,13 @@ export class ProcessoResponseDto {
   })
   unidade_respondida_id: string | null;
 
+  @ApiProperty({
+    description: 'ID do usuário atribuído ao processo',
+    required: false,
+    nullable: true,
+  })
+  usuario_atribuido_id: string | null;
+
   @ApiProperty({ description: 'Status ativo/inativo do processo' })
   ativo: boolean;
 

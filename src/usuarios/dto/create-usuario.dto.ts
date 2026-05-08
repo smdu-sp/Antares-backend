@@ -4,7 +4,6 @@ import {
   IsBoolean,
   IsEmail,
   IsEnum,
-  IsNumber,
   IsOptional,
   IsString,
   MinLength,

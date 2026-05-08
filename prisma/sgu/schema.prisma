@@ -3,9 +3,8 @@ generator sguClient {
   output   = "../../node_modules/@prisma/sgu/client"
 }
 
-datasource db {
+datasource sguDb {
   provider = "mysql"
-  url      = env("SGU_DATABASE_URL")
 }
 
 model tblUsuarios {

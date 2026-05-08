@@ -21,9 +21,11 @@ export class PreferenciasService {
         usuario_id,
         chave: dto.chave,
         valor: dto.valor,
+        ativo: true,
       },
       update: {
         valor: dto.valor,
+        ativo: true,
         atualizadoEm: new Date(),
       },
     });
@@ -42,7 +44,7 @@ export class PreferenciasService {
       },
     });
 
-    if (!preferencia) {
+    if (!preferencia || !preferencia.ativo) {
       return null;
     }
 
@@ -58,7 +60,7 @@ export class PreferenciasService {
    */
   async buscarTodas(usuario_id: string) {
     const preferencias = await this.prisma.preferenciasUsuario.findMany({
-      where: { usuario_id },
+      where: { usuario_id, ativo: true },
       select: {
         id: true,
         chave: true,
@@ -75,27 +77,43 @@ export class PreferenciasService {
    * Deleta uma preferência do usuário
    */
   async deletar(usuario_id: string, chave: string) {
-    try {
-      await this.prisma.preferenciasUsuario.delete({
-        where: {
-          usuario_id_chave: {
-            usuario_id,
-            chave,
-          },
+    const preferencia = await this.prisma.preferenciasUsuario.findUnique({
+      where: {
+        usuario_id_chave: {
+          usuario_id,
+          chave,
         },
-      });
-      return { success: true };
-    } catch (error) {
+      },
+      select: { id: true, ativo: true },
+    });
+
+    if (!preferencia || !preferencia.ativo) {
       return { success: false, message: 'Preferência não encontrada' };
     }
+
+    await this.prisma.preferenciasUsuario.update({
+      where: {
+        usuario_id_chave: {
+          usuario_id,
+          chave,
+        },
+      },
+      data: {
+        ativo: false,
+        atualizadoEm: new Date(),
+      },
+    });
+
+    return { success: true };
   }
 
   /**
    * Deleta todas as preferências do usuário
    */
   async deletarTodas(usuario_id: string) {
-    await this.prisma.preferenciasUsuario.deleteMany({
-      where: { usuario_id },
+    await this.prisma.preferenciasUsuario.updateMany({
+      where: { usuario_id, ativo: true },
+      data: { ativo: false, atualizadoEm: new Date() },
     });
     return { success: true };
   }

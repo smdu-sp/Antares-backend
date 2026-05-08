@@ -23,8 +23,10 @@ import {
   ProcessoResponseDto,
   ProcessoPaginadoResponseDto,
 } from './dto/processo-response.dto';
+import { PoliticaColunasProcessosResponseDto } from './dto/politica-colunas-processos-response.dto';
 import { Permissoes } from 'src/auth/decorators/permissoes.decorator';
 import { UsuarioAtual } from 'src/auth/decorators/usuario-atual.decorator';
+import { RequerCapacidade } from 'src/auth/decorators/requer-capacidade.decorator';
 import { Usuario } from '@prisma/client';
 
 /**
@@ -64,7 +66,8 @@ export class ProcessosController {
    * @param createProcessoDto - Dados do processo
    * @returns Processo criado
    */
-  @Permissoes('ADM', 'TEC') // Apenas Admin e Técnico podem criar
+  @Permissoes('ADM', 'TEC', 'USR')
+  @RequerCapacidade('processo.modificar')
   @Post()
   @ApiOperation({ summary: 'Cria um novo processo' })
   @ApiResponse({
@@ -98,6 +101,7 @@ export class ProcessosController {
    * @returns Lista paginada de processos
    */
   @Permissoes('ADM', 'TEC', 'USR') // Todos os usuários autenticados podem listar
+  @RequerCapacidade('processo.visualizar')
   @Get()
   @ApiOperation({
     summary: 'Lista todos os processos com paginação e filtros',
@@ -136,15 +140,14 @@ export class ProcessosController {
    * Conta total de processos
    */
   @Permissoes('ADM', 'TEC', 'USR')
+  @RequerCapacidade('processo.visualizar')
   @Get('contar/total')
   @ApiOperation({ summary: 'Conta total de processos' })
   @ApiResponse({
     status: 200,
     description: 'Número total de processos',
   })
-  contarTotal(
-    @UsuarioAtual() usuario?: Usuario,
-  ): Promise<{ total: number }> {
+  contarTotal(@UsuarioAtual() usuario?: Usuario): Promise<{ total: number }> {
     return this.processosService
       .contarTotal(usuario?.id)
       .then((total) => ({ total }));
@@ -155,6 +158,7 @@ export class ProcessosController {
    * Conta processos em andamento (não concluídos e não atrasados)
    */
   @Permissoes('ADM', 'TEC', 'USR')
+  @RequerCapacidade('processo.visualizar')
   @Get('contar/em-andamento')
   @ApiOperation({ summary: 'Conta processos em andamento' })
   @ApiResponse({
@@ -174,6 +178,7 @@ export class ProcessosController {
    * Conta processos vencendo hoje
    */
   @Permissoes('ADM', 'TEC', 'USR')
+  @RequerCapacidade('processo.visualizar')
   @Get('contar/vencendo-hoje')
   @ApiOperation({ summary: 'Conta processos vencendo hoje' })
   @ApiResponse({
@@ -193,6 +198,7 @@ export class ProcessosController {
    * Conta processos atrasados
    */
   @Permissoes('ADM', 'TEC', 'USR')
+  @RequerCapacidade('processo.visualizar')
   @Get('contar/atrasados')
   @ApiOperation({ summary: 'Conta processos atrasados' })
   @ApiResponse({ status: 200, description: 'Número de processos atrasados' })
@@ -209,6 +215,7 @@ export class ProcessosController {
    * Conta processos concluídos
    */
   @Permissoes('ADM', 'TEC', 'USR')
+  @RequerCapacidade('processo.visualizar')
   @Get('contar/concluidos')
   @ApiOperation({ summary: 'Conta processos concluídos' })
   @ApiResponse({ status: 200, description: 'Número de processos concluídos' })
@@ -218,6 +225,30 @@ export class ProcessosController {
     return this.processosService
       .contarConcluidos(usuario?.id)
       .then((total) => ({ total }));
+  }
+
+  /**
+   * GET /processos/colunas/politica
+   * Retorna politica oficial de colunas por grupo ativo
+   * e aplica preferencia do usuario apenas para ordem.
+   */
+  @Permissoes('ADM', 'TEC', 'USR')
+  @RequerCapacidade('processo.visualizar')
+  @Get('colunas/politica')
+  @ApiOperation({
+    summary: 'Retorna politica oficial de colunas do grid de processos',
+    description:
+      'A politica de colunas e definida por grupo ativo. Preferencias do usuario sao usadas apenas para ordem.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Politica de colunas carregada com sucesso',
+    type: PoliticaColunasProcessosResponseDto,
+  })
+  obterPoliticaColunas(
+    @UsuarioAtual() usuario: Usuario,
+  ): Promise<PoliticaColunasProcessosResponseDto> {
+    return this.processosService.obterPoliticaColunasProcessos(usuario.id);
   }
 
   /**
@@ -242,6 +273,7 @@ export class ProcessosController {
    * @returns Processo encontrado
    */
   @Permissoes('ADM', 'TEC', 'USR')
+  @RequerCapacidade('processo.visualizar')
   @Get(':id')
   @ApiOperation({ summary: 'Busca um processo por ID' })
   @ApiResponse({
@@ -265,6 +297,7 @@ export class ProcessosController {
    * @returns Processo encontrado
    */
   @Permissoes('ADM', 'TEC', 'USR')
+  @RequerCapacidade('processo.visualizar')
   @Get('numero-sei/:numero_sei')
   @ApiOperation({ summary: 'Busca um processo por número SEI' })
   @ApiResponse({
@@ -288,7 +321,8 @@ export class ProcessosController {
    * @param updateProcessoDto - Dados a serem atualizados
    * @returns Processo atualizado
    */
-  @Permissoes('ADM', 'TEC')
+  @Permissoes('ADM', 'TEC', 'USR')
+  @RequerCapacidade('processo.modificar')
   @Patch(':id')
   @ApiOperation({ summary: 'Atualiza um processo' })
   @ApiResponse({
@@ -313,6 +347,7 @@ export class ProcessosController {
    * @param usuario - Usuário autenticado
    * @returns Processo atualizado com resposta final
    */
+  @RequerCapacidade('processo.modificar')
   @Post('resposta-final')
   @ApiOperation({ summary: 'Cria resposta final para um processo' })
   @ApiResponse({
@@ -342,7 +377,8 @@ export class ProcessosController {
    * @param id - ID do processo
    * @returns Confirmação de remoção
    */
-  @Permissoes('ADM') // Apenas Admin pode remover
+  @Permissoes('ADM', 'TEC', 'USR')
+  @RequerCapacidade('processo.excluir')
   @Delete(':id')
   @ApiOperation({ summary: 'Remove um processo' })
   @ApiResponse({ status: 200, description: 'Processo removido' })

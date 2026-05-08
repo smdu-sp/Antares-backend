@@ -10,9 +10,11 @@ import { UnidadesModule } from './unidades/unidades.module';
 import { InteressadosModule } from './interessados/interessados.module';
 import { ExportModule } from './export/export.module';
 import { PreferenciasModule } from './preferencias/preferencias.module';
+import { AcessosAdminModule } from './acessos-admin/acessos-admin.module';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { RoleGuard } from './auth/guards/role.guard';
+import { CapacidadeGuard } from './auth/guards/capacidade.guard';
 
 @Global()
 @Module({
@@ -28,6 +30,7 @@ import { RoleGuard } from './auth/guards/role.guard';
     InteressadosModule,
     ExportModule,
     PreferenciasModule,
+    AcessosAdminModule,
   ],
   providers: [
     AppService,
@@ -38,6 +41,10 @@ import { RoleGuard } from './auth/guards/role.guard';
     {
       provide: APP_GUARD,
       useClass: RoleGuard,
+    },
+    {
+      provide: APP_GUARD,
+      useClass: CapacidadeGuard,
     },
   ],
 })

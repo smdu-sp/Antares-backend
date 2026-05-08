@@ -21,6 +21,7 @@ import {
 import { AndamentoResponseDto } from './dto/andamento-response.dto';
 import { Permissoes } from 'src/auth/decorators/permissoes.decorator';
 import { UsuarioAtual } from 'src/auth/decorators/usuario-atual.decorator';
+import { RequerCapacidade } from 'src/auth/decorators/requer-capacidade.decorator';
 import { Usuario } from '@prisma/client';
 
 @ApiTags('Andamentos')
@@ -34,6 +35,7 @@ export class AndamentosController {
    * Cria um novo andamento (envia processo de uma unidade para outra)
    */
   @Permissoes('ADM', 'TEC')
+  @RequerCapacidade('andamento.modificar')
   @Post()
   @ApiOperation({ summary: 'Cria um novo andamento' })
   @ApiResponse({
@@ -59,6 +61,7 @@ export class AndamentosController {
    * - status: filtrar por status (EM_ANDAMENTO, CONCLUIDO, PRORROGADO)
    */
   @Permissoes('ADM', 'TEC', 'USR')
+  @RequerCapacidade('andamento.visualizar')
   @Get()
   @ApiOperation({ summary: 'Lista todos os andamentos com paginação' })
   buscarTudo(
@@ -66,12 +69,14 @@ export class AndamentosController {
     @Query('limite') limite?: string,
     @Query('processo_id') processo_id?: string,
     @Query('status') status?: string,
+    @UsuarioAtual() usuario?: Usuario,
   ) {
     return this.andamentosService.buscarTudo(
       +pagina,
       +limite,
       processo_id,
       status,
+      usuario?.id,
     );
   }
 
@@ -80,12 +85,15 @@ export class AndamentosController {
    * Conta andamentos concluídos
    */
   @Permissoes('ADM', 'TEC', 'USR')
+  @RequerCapacidade('andamento.visualizar')
   @Get('contar/concluidos')
   @ApiOperation({ summary: 'Conta andamentos concluídos' })
   @ApiResponse({ status: 200, description: 'Número de andamentos concluídos' })
-  contarConcluidos(): Promise<{ total: number }> {
+  contarConcluidos(
+    @UsuarioAtual() usuario?: Usuario,
+  ): Promise<{ total: number }> {
     return this.andamentosService
-      .contarConcluidos()
+      .contarConcluidos(usuario?.id)
       .then((total) => ({ total }));
   }
 
@@ -94,12 +102,15 @@ export class AndamentosController {
    * Conta andamentos vencidos
    */
   @Permissoes('ADM', 'TEC', 'USR')
+  @RequerCapacidade('andamento.visualizar')
   @Get('contar/vencidos')
   @ApiOperation({ summary: 'Conta andamentos vencidos' })
   @ApiResponse({ status: 200, description: 'Número de andamentos vencidos' })
-  contarVencidos(): Promise<{ total: number }> {
+  contarVencidos(
+    @UsuarioAtual() usuario?: Usuario,
+  ): Promise<{ total: number }> {
     return this.andamentosService
-      .contarVencidos()
+      .contarVencidos(usuario?.id)
       .then((total) => ({ total }));
   }
 
@@ -108,15 +119,18 @@ export class AndamentosController {
    * Conta andamentos vencendo hoje
    */
   @Permissoes('ADM', 'TEC', 'USR')
+  @RequerCapacidade('andamento.visualizar')
   @Get('contar/vencendo-hoje')
   @ApiOperation({ summary: 'Conta andamentos vencendo hoje' })
   @ApiResponse({
     status: 200,
     description: 'Número de andamentos vencendo hoje',
   })
-  contarVencendoHoje(): Promise<{ total: number }> {
+  contarVencendoHoje(
+    @UsuarioAtual() usuario?: Usuario,
+  ): Promise<{ total: number }> {
     return this.andamentosService
-      .contarVencendoHoje()
+      .contarVencendoHoje(usuario?.id)
       .then((total) => ({ total }));
   }
 
@@ -125,15 +139,18 @@ export class AndamentosController {
    * Conta andamentos em andamento
    */
   @Permissoes('ADM', 'TEC', 'USR')
+  @RequerCapacidade('andamento.visualizar')
   @Get('contar/em-andamento')
   @ApiOperation({ summary: 'Conta andamentos em andamento' })
   @ApiResponse({
     status: 200,
     description: 'Número de andamentos em andamento',
   })
-  contarEmAndamento(): Promise<{ total: number }> {
+  contarEmAndamento(
+    @UsuarioAtual() usuario?: Usuario,
+  ): Promise<{ total: number }> {
     return this.andamentosService
-      .contarEmAndamento()
+      .contarEmAndamento(usuario?.id)
       .then((total) => ({ total }));
   }
 
@@ -142,6 +159,7 @@ export class AndamentosController {
    * Busca todos os andamentos de um processo específico
    */
   @Permissoes('ADM', 'TEC', 'USR')
+  @RequerCapacidade('andamento.visualizar')
   @Get('processo/:processo_id')
   @ApiOperation({ summary: 'Busca andamentos de um processo' })
   @ApiResponse({
@@ -151,8 +169,9 @@ export class AndamentosController {
   })
   buscarPorProcesso(
     @Param('processo_id') processo_id: string,
+    @UsuarioAtual() usuario?: Usuario,
   ): Promise<AndamentoResponseDto[]> {
-    return this.andamentosService.buscarPorProcesso(processo_id);
+    return this.andamentosService.buscarPorProcesso(processo_id, usuario?.id);
   }
 
   /**
@@ -161,6 +180,7 @@ export class AndamentosController {
    * IMPORTANTE: Esta rota deve vir ANTES de @Patch(':id') para não ser capturada como ID
    */
   @Permissoes('ADM', 'TEC')
+  @RequerCapacidade('andamento.modificar')
   @Patch('lote')
   @ApiOperation({ summary: 'Operações em lote em andamentos' })
   @ApiResponse({ status: 200, description: 'Operações realizadas com sucesso' })
@@ -176,6 +196,7 @@ export class AndamentosController {
    * Busca um andamento por ID
    */
   @Permissoes('ADM', 'TEC', 'USR')
+  @RequerCapacidade('andamento.visualizar')
   @Get(':id')
   @ApiOperation({ summary: 'Busca um andamento por ID' })
   @ApiResponse({
@@ -183,8 +204,11 @@ export class AndamentosController {
     description: 'Andamento encontrado',
     type: AndamentoResponseDto,
   })
-  buscarPorId(@Param('id') id: string): Promise<AndamentoResponseDto> {
-    return this.andamentosService.buscarPorId(id);
+  buscarPorId(
+    @Param('id') id: string,
+    @UsuarioAtual() usuario?: Usuario,
+  ): Promise<AndamentoResponseDto> {
+    return this.andamentosService.buscarPorId(id, usuario?.id);
   }
 
   /**
@@ -192,6 +216,7 @@ export class AndamentosController {
    * Atualiza um andamento
    */
   @Permissoes('ADM', 'TEC')
+  @RequerCapacidade('andamento.modificar')
   @Patch(':id')
   @ApiOperation({ summary: 'Atualiza um andamento' })
   @ApiResponse({
@@ -212,6 +237,7 @@ export class AndamentosController {
    * Marca um andamento como concluído
    */
   @Permissoes('ADM', 'TEC')
+  @RequerCapacidade('andamento.modificar')
   @Patch(':id/concluir')
   @ApiOperation({ summary: 'Marca um andamento como concluído' })
   @ApiResponse({
@@ -231,6 +257,7 @@ export class AndamentosController {
    * Prorroga um andamento
    */
   @Permissoes('ADM', 'TEC')
+  @RequerCapacidade('andamento.modificar')
   @Patch(':id/prorrogar')
   @ApiOperation({ summary: 'Prorroga um andamento' })
   @ApiResponse({
@@ -251,6 +278,7 @@ export class AndamentosController {
    * Remove um andamento
    */
   @Permissoes('DEV', 'ADM', 'TEC')
+  @RequerCapacidade('andamento.excluir')
   @Delete(':id')
   @ApiOperation({ summary: 'Remove um andamento' })
   @ApiResponse({ status: 200, description: 'Andamento removido' })

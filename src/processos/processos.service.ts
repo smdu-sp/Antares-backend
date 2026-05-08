@@ -14,7 +14,7 @@ import {
   ProcessoResponseDto,
   ProcessoPaginadoResponseDto,
 } from './dto/processo-response.dto';
-import { processo, andamento, $Enums } from '@prisma/client';
+import { processo, andamento, $Enums, GrupoCodigo } from '@prisma/client';
 import { AppService } from 'src/app.service';
 import { LogsService } from 'src/logs/logs.service';
 
@@ -45,11 +45,524 @@ function mapProcessoToResponseDto(
  */
 @Injectable()
 export class ProcessosService {
+  private readonly strictGroupMode = true;
+  private readonly CHAVE_GRUPO_ATIVO = 'auth.grupo_ativo_id';
+  private readonly CHAVE_ORDEM_COLUNAS_PROCESSOS =
+    'grid.processos.colunas.ordem';
+  private readonly COLUNAS_FIXAS_PROCESSOS = ['selecao', 'expansao'];
+  private readonly COLUNAS_PADRAO_EXPEDIENTE = [
+    'numero_sei',
+    'assunto',
+    'origem',
+    'interessado',
+    'unidade_remetente',
+    'unidade_destino',
+    'data_recebimento',
+    'data_envio_unidade',
+    'prazo',
+    'prorrogacao',
+    'data_resposta_final',
+    'observacoes',
+  ];
+  private readonly COLUNAS_PADRAO_SERVIN = [
+    'numero_sei',
+    'assunto',
+    'origem',
+    'responsavel',
+    'prazo',
+    'observacoes',
+  ];
+  private readonly COLUNAS_PADRAO_GABINETE = [
+    'numero_sei',
+    'assunto',
+    'origem',
+    'interessado',
+    'unidade_remetente',
+    'unidade_destino',
+    'responsavel',
+    'data_recebimento',
+    'data_envio_unidade',
+    'prazo',
+    'prorrogacao',
+    'data_resposta_final',
+    'observacoes',
+  ];
+
   constructor(
     private prisma: PrismaService, // Injeção de dependência do Prisma
     private app: AppService, // Serviço auxiliar para paginação
     private logsService: LogsService, // Serviço de logs
   ) {}
+
+  async obterPoliticaColunasProcessos(usuarioId: string) {
+    const grupoAtivoId = await this.obterGrupoAtivoId(usuarioId);
+
+    if (!grupoAtivoId) {
+      throw new BadRequestException(
+        'Usuario nao possui grupo ativo para carregar politica de colunas.',
+      );
+    }
+
+    const vinculoAtivo = await this.prisma.usuarioGrupo.findFirst({
+      where: {
+        usuario_id: usuarioId,
+        grupo_id: grupoAtivoId,
+        ativo: true,
+        grupo: {
+          ativo: true,
+        },
+      },
+      select: {
+        grupo: {
+          select: {
+            id: true,
+            codigo: true,
+            nome: true,
+          },
+        },
+      },
+    });
+
+    if (!vinculoAtivo) {
+      throw new BadRequestException(
+        'Vinculo ativo do grupo selecionado nao foi encontrado para o usuario.',
+      );
+    }
+
+    const ordemPadrao = this.obterColunasPadraoPorGrupo(
+      vinculoAtivo.grupo.codigo,
+    );
+    const chaveGrupo = `${this.CHAVE_ORDEM_COLUNAS_PROCESSOS}.${vinculoAtivo.grupo.codigo.toLowerCase()}`;
+
+    const [preferenciaGrupo, preferenciaGlobal] = await Promise.all([
+      this.prisma.preferenciasUsuario.findUnique({
+        where: {
+          usuario_id_chave: {
+            usuario_id: usuarioId,
+            chave: chaveGrupo,
+          },
+        },
+        select: {
+          valor: true,
+          ativo: true,
+        },
+      }),
+      this.prisma.preferenciasUsuario.findUnique({
+        where: {
+          usuario_id_chave: {
+            usuario_id: usuarioId,
+            chave: this.CHAVE_ORDEM_COLUNAS_PROCESSOS,
+          },
+        },
+        select: {
+          valor: true,
+          ativo: true,
+        },
+      }),
+    ]);
+
+    const preferenciaValor =
+      (preferenciaGrupo?.ativo && preferenciaGrupo.valor
+        ? preferenciaGrupo.valor
+        : null) ||
+      (preferenciaGlobal?.ativo && preferenciaGlobal.valor
+        ? preferenciaGlobal.valor
+        : null);
+
+    const ordemUsuario = this.parseOrdemColunasPreferida(preferenciaValor);
+    const ordemEfetiva = this.montarOrdemEfetivaColunas(
+      ordemPadrao,
+      ordemUsuario,
+    );
+
+    return {
+      grupoAtivo: vinculoAtivo.grupo,
+      chavePreferenciaOrdem: chaveGrupo,
+      colunasFixas: this.COLUNAS_FIXAS_PROCESSOS,
+      colunasDisponiveis: ordemPadrao,
+      ordemPadrao,
+      ordemUsuario,
+      ordemEfetiva,
+    };
+  }
+
+  private obterColunasPadraoPorGrupo(codigoGrupo: GrupoCodigo): string[] {
+    if (codigoGrupo === GrupoCodigo.SERVIN) {
+      return [...this.COLUNAS_PADRAO_SERVIN];
+    }
+
+    if (codigoGrupo === GrupoCodigo.GABINETE) {
+      return [...this.COLUNAS_PADRAO_GABINETE];
+    }
+
+    if (codigoGrupo === GrupoCodigo.GLOBAL) {
+      return [...this.COLUNAS_PADRAO_GABINETE];
+    }
+
+    return [...this.COLUNAS_PADRAO_EXPEDIENTE];
+  }
+
+  private parseOrdemColunasPreferida(valor?: string | null): string[] {
+    if (!valor) {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(valor);
+
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+
+      return parsed.filter((item) => typeof item === 'string');
+    } catch {
+      return valor
+        .split(',')
+        .map((item) => item.trim())
+        .filter((item) => item.length > 0);
+    }
+  }
+
+  private montarOrdemEfetivaColunas(
+    ordemPadrao: string[],
+    ordemUsuario: string[],
+  ): string[] {
+    const colunasPermitidas = new Set(ordemPadrao);
+    const ordemUsuarioFiltrada = ordemUsuario.filter((item) =>
+      colunasPermitidas.has(item),
+    );
+    const usadas = new Set(ordemUsuarioFiltrada);
+
+    return [
+      ...ordemUsuarioFiltrada,
+      ...ordemPadrao.filter((item) => !usadas.has(item)),
+    ];
+  }
+
+  private async usuarioEhMasterGlobal(usuarioId?: string) {
+    if (!usuarioId) {
+      return false;
+    }
+
+    const vinculo = await this.prisma.usuarioGrupo.findFirst({
+      where: {
+        usuario_id: usuarioId,
+        ativo: true,
+        grupo: {
+          ativo: true,
+          codigo: GrupoCodigo.GLOBAL,
+        },
+      },
+      select: { id: true },
+    });
+
+    return !!vinculo;
+  }
+
+  private async vincularProcessoAoGrupoPrincipal(
+    processoId: string,
+    usuarioId: string,
+  ) {
+    const grupoAtivoId = await this.obterGrupoAtivoId(usuarioId);
+
+    if (!grupoAtivoId) {
+      throw new BadRequestException(
+        'Usuario criador nao possui grupo ativo para vincular o processo.',
+      );
+    }
+
+    await this.prisma.processoGrupo.upsert({
+      where: {
+        processo_id_grupo_id: {
+          processo_id: processoId,
+          grupo_id: grupoAtivoId,
+        },
+      },
+      create: {
+        processo_id: processoId,
+        grupo_id: grupoAtivoId,
+        nivelVisao: 'TOTAL',
+        ativo: true,
+      },
+      update: {
+        ativo: true,
+      },
+    });
+  }
+
+  private async usuarioTemVisualizacaoGabinete(usuarioId?: string) {
+    if (!usuarioId) {
+      return false;
+    }
+
+    const grupoAtivoId = await this.obterGrupoAtivoId(usuarioId);
+
+    if (!grupoAtivoId) {
+      return false;
+    }
+
+    const permissao = await this.prisma.usuarioGrupoPermissao.findFirst({
+      where: {
+        ativo: true,
+        visualizar_grupo: true,
+        usuarioGrupo: {
+          ativo: true,
+          usuario_id: usuarioId,
+          grupo_id: grupoAtivoId,
+          grupo: {
+            ativo: true,
+            codigo: GrupoCodigo.GABINETE,
+          },
+        },
+      },
+      select: { id: true },
+    });
+
+    return !!permissao;
+  }
+
+  private async obterGrupoAtivoId(usuarioId: string): Promise<string | null> {
+    const preferencia = await this.prisma.preferenciasUsuario.findUnique({
+      where: {
+        usuario_id_chave: {
+          usuario_id: usuarioId,
+          chave: this.CHAVE_GRUPO_ATIVO,
+        },
+      },
+      select: {
+        valor: true,
+        ativo: true,
+      },
+    });
+
+    if (preferencia?.ativo && preferencia.valor) {
+      const vinculoPreferido = await this.prisma.usuarioGrupo.findFirst({
+        where: {
+          usuario_id: usuarioId,
+          grupo_id: preferencia.valor,
+          ativo: true,
+          grupo: {
+            ativo: true,
+          },
+        },
+        select: { grupo_id: true },
+      });
+
+      if (vinculoPreferido) {
+        return vinculoPreferido.grupo_id;
+      }
+    }
+
+    const vinculo = await this.prisma.usuarioGrupo.findFirst({
+      where: {
+        usuario_id: usuarioId,
+        ativo: true,
+        grupo: {
+          ativo: true,
+        },
+      },
+      orderBy: [{ criadoEm: 'asc' }],
+      select: { grupo_id: true },
+    });
+
+    return vinculo?.grupo_id || null;
+  }
+
+  private async usuarioTemPermissaoGrupoNoProcesso(
+    usuarioId: string,
+    processo: {
+      usuario_atribuido_id?: string | null;
+      grupos?: { grupo: { id: string } }[];
+    },
+    acao: 'visualizar' | 'modificar' | 'excluir',
+  ): Promise<boolean> {
+    const ehMasterGlobal = await this.usuarioEhMasterGlobal(usuarioId);
+
+    if (ehMasterGlobal) {
+      return true;
+    }
+
+    const grupoAtivoId = await this.obterGrupoAtivoId(usuarioId);
+
+    if (!grupoAtivoId) {
+      return false;
+    }
+
+    const grupos = processo.grupos || [];
+
+    if (grupos.length === 0) {
+      return false;
+    }
+
+    const grupoIds = grupos.map((item) => item.grupo.id);
+
+    if (!grupoIds.includes(grupoAtivoId)) {
+      return false;
+    }
+
+    const permissoes = await this.prisma.usuarioGrupoPermissao.findMany({
+      where: {
+        ativo: true,
+        usuarioGrupo: {
+          ativo: true,
+          usuario_id: usuarioId,
+          grupo_id: {
+            in: [grupoAtivoId],
+          },
+          grupo: {
+            ativo: true,
+          },
+        },
+      },
+      select: {
+        visualizar_grupo: true,
+        visualizar_proprios: true,
+        modificar_grupo: true,
+        modificar_proprios: true,
+        excluir: true,
+      },
+    });
+
+    if (permissoes.length === 0) {
+      return false;
+    }
+
+    const isProprio = processo.usuario_atribuido_id === usuarioId;
+
+    if (acao === 'excluir') {
+      return permissoes.some((item) => item.excluir);
+    }
+
+    if (acao === 'modificar') {
+      return permissoes.some(
+        (item) =>
+          item.modificar_grupo || (item.modificar_proprios && isProprio),
+      );
+    }
+
+    return permissoes.some(
+      (item) =>
+        item.visualizar_grupo || (item.visualizar_proprios && isProprio),
+    );
+  }
+
+  private async montarFiltrosVisibilidadeConsulta(usuarioId?: string) {
+    if (!usuarioId) {
+      return { semAcesso: false, filtros: [] as any[] };
+    }
+
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { id: usuarioId },
+      select: {
+        unidade_id: true,
+        permissao: true,
+      },
+    });
+
+    if (!usuario) {
+      return { semAcesso: true, filtros: [] as any[] };
+    }
+
+    if (['DEV', 'ADM'].includes(usuario.permissao)) {
+      return { semAcesso: false, filtros: [] as any[] };
+    }
+
+    const ehMasterGlobal = await this.usuarioEhMasterGlobal(usuarioId);
+
+    if (ehMasterGlobal) {
+      return { semAcesso: false, filtros: [] as any[] };
+    }
+
+    const grupoAtivoId = await this.obterGrupoAtivoId(usuarioId);
+
+    if (!grupoAtivoId) {
+      return { semAcesso: true, filtros: [] as any[] };
+    }
+
+    const temVisualizacaoGabinete =
+      await this.usuarioTemVisualizacaoGabinete(usuarioId);
+
+    if (temVisualizacaoGabinete) {
+      return { semAcesso: false, filtros: [] as any[] };
+    }
+
+    const permissoesGrupo = await this.prisma.usuarioGrupoPermissao.findMany({
+      where: {
+        ativo: true,
+        OR: [{ visualizar_grupo: true }, { visualizar_proprios: true }],
+        usuarioGrupo: {
+          ativo: true,
+          usuario_id: usuarioId,
+          grupo_id: grupoAtivoId,
+          grupo: {
+            ativo: true,
+          },
+        },
+      },
+      select: {
+        visualizar_grupo: true,
+        visualizar_proprios: true,
+        usuarioGrupo: {
+          select: {
+            grupo_id: true,
+          },
+        },
+      },
+    });
+
+    if (permissoesGrupo.length > 0) {
+      const gruposComVisualizacao = Array.from(
+        new Set(
+          permissoesGrupo
+            .filter((item) => item.visualizar_grupo)
+            .map((item) => item.usuarioGrupo.grupo_id),
+        ),
+      );
+
+      const podeVisualizarProprios = permissoesGrupo.some(
+        (item) => item.visualizar_proprios,
+      );
+
+      const filtrosGrupo: any[] = [];
+
+      if (gruposComVisualizacao.length > 0) {
+        filtrosGrupo.push({
+          grupos: {
+            some: {
+              ativo: true,
+              grupo_id: {
+                in: gruposComVisualizacao,
+              },
+            },
+          },
+        });
+      }
+
+      if (podeVisualizarProprios) {
+        filtrosGrupo.push({
+          AND: [
+            { usuario_atribuido_id: usuarioId },
+            {
+              grupos: {
+                some: {
+                  ativo: true,
+                  grupo_id: grupoAtivoId,
+                },
+              },
+            },
+          ],
+        });
+      }
+
+      if (filtrosGrupo.length === 0) {
+        return { semAcesso: true, filtros: [] as any[] };
+      }
+
+      return { semAcesso: false, filtros: [{ OR: filtrosGrupo }] };
+    }
+
+    return { semAcesso: true, filtros: [] as any[] };
+  }
 
   /**
    * Busca sugestões de unidade de origem para autocomplete
@@ -81,7 +594,7 @@ export class ProcessosService {
     createProcessoDto: CreateProcessoDto,
     usuario_id: string,
   ): Promise<ProcessoResponseDto> {
-    // Busca o usuário para obter a unidade_id
+    // Busca o usuário para obter unidade do cadastro
     const usuario = await this.prisma.usuario.findUnique({
       where: { id: usuario_id },
       select: { unidade_id: true },
@@ -89,6 +602,17 @@ export class ProcessosService {
 
     if (!usuario || !usuario.unidade_id) {
       throw new BadRequestException('Usuário não possui unidade atribuída.');
+    }
+
+    const usuarioAtribuidoId = usuario_id;
+
+    if (
+      createProcessoDto.usuario_atribuido_id &&
+      createProcessoDto.usuario_atribuido_id !== usuario_id
+    ) {
+      throw new BadRequestException(
+        'Owner do processo deve ser o usuario criador.',
+      );
     }
 
     // Se numero_sei não foi fornecido, gera um temporário para permitir criação de rascunho
@@ -168,6 +692,7 @@ export class ProcessosService {
         prorrogacao: createProcessoDto.data_prorrogacao
           ? new Date(createProcessoDto.data_prorrogacao)
           : undefined,
+        usuario_atribuido_id: usuarioAtribuidoId,
         unidade_id: usuario.unidade_id,
       },
     });
@@ -177,6 +702,8 @@ export class ProcessosService {
         'Não foi possível criar o processo.',
       );
     }
+
+    await this.vincularProcessoAoGrupoPrincipal(processo.id, usuario_id);
 
     // Registra log
     await this.logsService.criar(
@@ -207,20 +734,11 @@ export class ProcessosService {
     // Valida e ajusta página e limite usando o AppService
     [pagina, limite] = this.app.verificaPagina(pagina, limite);
 
-    // Busca o usuário para obter permissão e unidade_id
-    let unidade_id: string | undefined;
-    let permissao: string | undefined;
+    const visibilidade =
+      await this.montarFiltrosVisibilidadeConsulta(usuario_id);
 
-    if (usuario_id) {
-      const usuario = await this.prisma.usuario.findUnique({
-        where: { id: usuario_id },
-        select: { unidade_id: true, permissao: true },
-      });
-
-      if (usuario) {
-        unidade_id = usuario.unidade_id;
-        permissao = usuario.permissao;
-      }
+    if (visibilidade.semAcesso) {
+      return { total: 0, pagina: 0, limite: 0, data: [] };
     }
 
     // Calcula início e fim do dia atual (00:00:00 até 23:59:59)
@@ -232,12 +750,9 @@ export class ProcessosService {
     // Monta os filtros de busca
     const searchParams: any = {
       ativo: true, // Apenas processos ativos
-      // Filtra por unidade do usuário (exceto para DEV e ADM que podem ver todos)
-      ...(unidade_id &&
-        permissao &&
-        !['DEV', 'ADM'].includes(permissao) && {
-          unidade_id: unidade_id,
-        }),
+      ...(visibilidade.filtros.length > 0
+        ? { AND: [...visibilidade.filtros] }
+        : {}),
     };
 
     // === ISSUE #17: BUSCA GERAL ===
@@ -425,13 +940,19 @@ export class ProcessosService {
 
       // Adiciona os filtros de status
       if (filtrosStatus.length > 0) {
+        const andAtual = [...(searchParams.AND || [])];
+
         // Se já existe um OR (da busca geral), combina com AND
         if (searchParams.OR) {
-          searchParams.AND = [{ OR: searchParams.OR }, { OR: filtrosStatus }];
+          searchParams.AND = [
+            ...andAtual,
+            { OR: searchParams.OR },
+            { OR: filtrosStatus },
+          ];
           delete searchParams.OR;
         } else {
           // Se não tem busca geral, usa OR direto para os filtros
-          searchParams.OR = filtrosStatus;
+          searchParams.AND = [...andAtual, { OR: filtrosStatus }];
         }
       }
     }
@@ -478,6 +999,18 @@ export class ProcessosService {
                 nomeSocial: true,
                 login: true,
                 email: true,
+              },
+            },
+          },
+        },
+        grupos: {
+          where: { ativo: true },
+          select: {
+            grupo: {
+              select: {
+                id: true,
+                codigo: true,
+                nome: true,
               },
             },
           },
@@ -538,6 +1071,18 @@ export class ProcessosService {
             },
           },
         },
+        grupos: {
+          where: { ativo: true },
+          select: {
+            grupo: {
+              select: {
+                id: true,
+                codigo: true,
+                nome: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -547,15 +1092,33 @@ export class ProcessosService {
 
     // Verifica se o usuário tem permissão para ver este processo
     if (usuario_id) {
+      const ehMasterGlobal = await this.usuarioEhMasterGlobal(usuario_id);
+      const temVisualizacaoGabinete =
+        await this.usuarioTemVisualizacaoGabinete(usuario_id);
+
       const usuario = await this.prisma.usuario.findUnique({
         where: { id: usuario_id },
-        select: { unidade_id: true, permissao: true },
+        select: {
+          unidade_id: true,
+          permissao: true,
+        },
       });
 
-      if (usuario && !['DEV', 'ADM'].includes(usuario.permissao)) {
-        if (processo.unidade_id !== usuario.unidade_id) {
+      if (
+        usuario &&
+        !['DEV'].includes(usuario.permissao) &&
+        !ehMasterGlobal &&
+        !temVisualizacaoGabinete
+      ) {
+        const temPermissaoGrupo = await this.usuarioTemPermissaoGrupoNoProcesso(
+          usuario_id,
+          processo,
+          'visualizar',
+        );
+
+        if (!temPermissaoGrupo) {
           throw new ForbiddenException(
-            'Você não tem permissão para acessar este processo.',
+            'Você não tem permissão de grupo para acessar este processo.',
           );
         }
       }
@@ -609,6 +1172,18 @@ export class ProcessosService {
             },
           },
         },
+        grupos: {
+          where: { ativo: true },
+          select: {
+            grupo: {
+              select: {
+                id: true,
+                codigo: true,
+                nome: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -618,15 +1193,33 @@ export class ProcessosService {
 
     // Verifica se o usuário tem permissão para ver este processo
     if (usuario_id) {
+      const ehMasterGlobal = await this.usuarioEhMasterGlobal(usuario_id);
+      const temVisualizacaoGabinete =
+        await this.usuarioTemVisualizacaoGabinete(usuario_id);
+
       const usuario = await this.prisma.usuario.findUnique({
         where: { id: usuario_id },
-        select: { unidade_id: true, permissao: true },
+        select: {
+          unidade_id: true,
+          permissao: true,
+        },
       });
 
-      if (usuario && !['DEV', 'ADM'].includes(usuario.permissao)) {
-        if (processo.unidade_id !== usuario.unidade_id) {
+      if (
+        usuario &&
+        !['DEV'].includes(usuario.permissao) &&
+        !ehMasterGlobal &&
+        !temVisualizacaoGabinete
+      ) {
+        const temPermissaoGrupo = await this.usuarioTemPermissaoGrupoNoProcesso(
+          usuario_id,
+          processo,
+          'visualizar',
+        );
+
+        if (!temPermissaoGrupo) {
           throw new ForbiddenException(
-            'Você não tem permissão para acessar este processo.',
+            'Você não tem permissão de grupo para acessar este processo.',
           );
         }
       }
@@ -650,6 +1243,46 @@ export class ProcessosService {
   ): Promise<ProcessoResponseDto> {
     // Verifica se o processo existe e se o usuário tem permissão
     const processoExistente = await this.buscarPorId(id, usuario_id);
+
+    const usuarioAtual = await this.prisma.usuario.findUnique({
+      where: { id: usuario_id },
+      select: {
+        permissao: true,
+      },
+    });
+
+    const processoPermissao = await this.prisma.processo.findUnique({
+      where: { id },
+      select: {
+        usuario_atribuido_id: true,
+        grupos: {
+          where: { ativo: true },
+          select: { grupo: { select: { id: true } } },
+        },
+      },
+    });
+
+    const temPermissaoGrupoModificar =
+      processoPermissao && usuarioAtual
+        ? await this.usuarioTemPermissaoGrupoNoProcesso(
+            usuario_id,
+            processoPermissao,
+            'modificar',
+          )
+        : false;
+
+    const ehMasterGlobal = await this.usuarioEhMasterGlobal(usuario_id);
+
+    if (
+      usuarioAtual &&
+      !['DEV', 'ADM'].includes(usuarioAtual.permissao) &&
+      !ehMasterGlobal &&
+      !temPermissaoGrupoModificar
+    ) {
+      throw new ForbiddenException(
+        'Você não tem permissão de grupo para editar este processo.',
+      );
+    }
 
     // Se está tentando atualizar o número SEI, verifica se não existe outro com o mesmo número
     if (
@@ -812,6 +1445,24 @@ export class ProcessosService {
 
     if (unidadeDestinoId !== null && unidadeDestinoId !== undefined) {
       dadosAtualizacao.unidade_destino_id = unidadeDestinoId;
+    }
+
+    if (updateProcessoDto.usuario_atribuido_id !== undefined) {
+      if (updateProcessoDto.usuario_atribuido_id) {
+        const usuarioAtribuido = await this.prisma.usuario.findUnique({
+          where: { id: updateProcessoDto.usuario_atribuido_id },
+          select: { id: true, status: true },
+        });
+
+        if (!usuarioAtribuido || !usuarioAtribuido.status) {
+          throw new BadRequestException(
+            'Usuário atribuído inválido ou inativo.',
+          );
+        }
+      }
+
+      dadosAtualizacao.usuario_atribuido_id =
+        updateProcessoDto.usuario_atribuido_id || null;
     }
 
     // Atualiza o processo
@@ -1149,6 +1800,46 @@ export class ProcessosService {
     // Verifica se o processo existe e se o usuário tem permissão
     const processo = await this.buscarPorId(id, usuario_id);
 
+    const usuarioAtual = await this.prisma.usuario.findUnique({
+      where: { id: usuario_id },
+      select: {
+        permissao: true,
+      },
+    });
+
+    const processoPermissao = await this.prisma.processo.findUnique({
+      where: { id },
+      select: {
+        usuario_atribuido_id: true,
+        grupos: {
+          where: { ativo: true },
+          select: { grupo: { select: { id: true } } },
+        },
+      },
+    });
+
+    const temPermissaoGrupoExcluir =
+      processoPermissao && usuarioAtual
+        ? await this.usuarioTemPermissaoGrupoNoProcesso(
+            usuario_id,
+            processoPermissao,
+            'excluir',
+          )
+        : false;
+
+    const ehMasterGlobal = await this.usuarioEhMasterGlobal(usuario_id);
+
+    if (
+      usuarioAtual &&
+      !['DEV', 'ADM'].includes(usuarioAtual.permissao) &&
+      !ehMasterGlobal &&
+      !temPermissaoGrupoExcluir
+    ) {
+      throw new ForbiddenException(
+        'Você não tem permissão de grupo para excluir este processo.',
+      );
+    }
+
     // Verifica se há andamentos ativos relacionados
     const andamentos = await this.prisma.andamento.findMany({
       where: {
@@ -1190,20 +1881,11 @@ export class ProcessosService {
    * @returns Número de processos vencendo hoje
    */
   async contarVencendoHoje(usuario_id?: string): Promise<number> {
-    // Busca o usuário para obter permissão e unidade_id
-    let unidade_id: string | undefined;
-    let permissao: string | undefined;
+    const visibilidade =
+      await this.montarFiltrosVisibilidadeConsulta(usuario_id);
 
-    if (usuario_id) {
-      const usuario = await this.prisma.usuario.findUnique({
-        where: { id: usuario_id },
-        select: { unidade_id: true, permissao: true },
-      });
-
-      if (usuario) {
-        unidade_id = usuario.unidade_id;
-        permissao = usuario.permissao;
-      }
+    if (visibilidade.semAcesso) {
+      return 0;
     }
 
     // Calcula início e fim do dia atual
@@ -1213,12 +1895,9 @@ export class ProcessosService {
     fimDoDia.setHours(23, 59, 59, 999);
 
     const searchParams: any = {
-      // Filtra por unidade do usuário (exceto para DEV e ADM que podem ver todos)
-      ...(unidade_id &&
-        permissao &&
-        !['DEV', 'ADM'].includes(permissao) && {
-          unidade_id: unidade_id,
-        }),
+      ...(visibilidade.filtros.length > 0
+        ? { AND: [...visibilidade.filtros] }
+        : {}),
       ativo: true, // Apenas processos ativos
       data_resposta_final: null, // Apenas processos sem resposta final
       OR: [
@@ -1253,20 +1932,11 @@ export class ProcessosService {
    * @returns Número de processos atrasados
    */
   async contarAtrasados(usuario_id?: string): Promise<number> {
-    // Busca o usuário para obter permissão e unidade_id
-    let unidade_id: string | undefined;
-    let permissao: string | undefined;
+    const visibilidade =
+      await this.montarFiltrosVisibilidadeConsulta(usuario_id);
 
-    if (usuario_id) {
-      const usuario = await this.prisma.usuario.findUnique({
-        where: { id: usuario_id },
-        select: { unidade_id: true, permissao: true },
-      });
-
-      if (usuario) {
-        unidade_id = usuario.unidade_id;
-        permissao = usuario.permissao;
-      }
+    if (visibilidade.semAcesso) {
+      return 0;
     }
 
     // Calcula início do dia atual
@@ -1274,12 +1944,9 @@ export class ProcessosService {
     hoje.setHours(0, 0, 0, 0);
 
     const searchParams: any = {
-      // Filtra por unidade do usuário (exceto para DEV e ADM que podem ver todos)
-      ...(unidade_id &&
-        permissao &&
-        !['DEV', 'ADM'].includes(permissao) && {
-          unidade_id: unidade_id,
-        }),
+      ...(visibilidade.filtros.length > 0
+        ? { AND: [...visibilidade.filtros] }
+        : {}),
       ativo: true, // Apenas processos ativos
       data_resposta_final: null, // Apenas processos sem resposta final
       OR: [
@@ -1305,29 +1972,17 @@ export class ProcessosService {
   }
 
   async contarConcluidos(usuario_id?: string): Promise<number> {
-    // Busca o usuário para obter permissão e unidade_id
-    let unidade_id: string | undefined;
-    let permissao: string | undefined;
+    const visibilidade =
+      await this.montarFiltrosVisibilidadeConsulta(usuario_id);
 
-    if (usuario_id) {
-      const usuario = await this.prisma.usuario.findUnique({
-        where: { id: usuario_id },
-        select: { unidade_id: true, permissao: true },
-      });
-
-      if (usuario) {
-        unidade_id = usuario.unidade_id;
-        permissao = usuario.permissao;
-      }
+    if (visibilidade.semAcesso) {
+      return 0;
     }
 
     const searchParams: any = {
-      // Filtra por unidade do usuário (exceto para DEV e ADM que podem ver todos)
-      ...(unidade_id &&
-        permissao &&
-        !['DEV', 'ADM'].includes(permissao) && {
-          unidade_id: unidade_id,
-        }),
+      ...(visibilidade.filtros.length > 0
+        ? { AND: [...visibilidade.filtros] }
+        : {}),
       ativo: true, // Apenas processos ativos
       data_resposta_final: { not: null }, // Processos com resposta final
     };
@@ -1344,29 +1999,17 @@ export class ProcessosService {
    * @returns Número total de processos
    */
   async contarTotal(usuario_id?: string): Promise<number> {
-    // Busca o usuário para obter permissão e unidade_id
-    let unidade_id: string | undefined;
-    let permissao: string | undefined;
+    const visibilidade =
+      await this.montarFiltrosVisibilidadeConsulta(usuario_id);
 
-    if (usuario_id) {
-      const usuario = await this.prisma.usuario.findUnique({
-        where: { id: usuario_id },
-        select: { unidade_id: true, permissao: true },
-      });
-
-      if (usuario) {
-        unidade_id = usuario.unidade_id;
-        permissao = usuario.permissao;
-      }
+    if (visibilidade.semAcesso) {
+      return 0;
     }
 
     const searchParams: any = {
-      // Filtra por unidade do usuário (exceto para DEV e ADM que podem ver todos)
-      ...(unidade_id &&
-        permissao &&
-        !['DEV', 'ADM'].includes(permissao) && {
-          unidade_id: unidade_id,
-        }),
+      ...(visibilidade.filtros.length > 0
+        ? { AND: [...visibilidade.filtros] }
+        : {}),
       ativo: true, // Apenas processos ativos
     };
 
@@ -1383,20 +2026,11 @@ export class ProcessosService {
    * @returns Número de processos em andamento
    */
   async contarEmAndamento(usuario_id?: string): Promise<number> {
-    // Busca o usuário para obter permissão e unidade_id
-    let unidade_id: string | undefined;
-    let permissao: string | undefined;
+    const visibilidade =
+      await this.montarFiltrosVisibilidadeConsulta(usuario_id);
 
-    if (usuario_id) {
-      const usuario = await this.prisma.usuario.findUnique({
-        where: { id: usuario_id },
-        select: { unidade_id: true, permissao: true },
-      });
-
-      if (usuario) {
-        unidade_id = usuario.unidade_id;
-        permissao = usuario.permissao;
-      }
+    if (visibilidade.semAcesso) {
+      return 0;
     }
 
     // Calcula início do dia atual
@@ -1404,12 +2038,9 @@ export class ProcessosService {
     hoje.setHours(0, 0, 0, 0);
 
     const searchParams: any = {
-      // Filtra por unidade do usuário (exceto para DEV e ADM que podem ver todos)
-      ...(unidade_id &&
-        permissao &&
-        !['DEV', 'ADM'].includes(permissao) && {
-          unidade_id: unidade_id,
-        }),
+      ...(visibilidade.filtros.length > 0
+        ? { AND: [...visibilidade.filtros] }
+        : {}),
       ativo: true, // Apenas processos ativos
       data_resposta_final: null, // Apenas processos sem resposta final (não concluídos)
       OR: [

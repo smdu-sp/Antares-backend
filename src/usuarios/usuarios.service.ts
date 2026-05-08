@@ -9,9 +9,16 @@ import {
 import { CreateUsuarioDto } from './dto/create-usuario.dto';
 import { UpdateUsuarioDto } from './dto/update-usuario.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { $Enums, Permissao, Usuario } from '@prisma/client';
+import {
+  $Enums,
+  GrupoCodigo,
+  GrupoTipo,
+  Permissao,
+  Usuario,
+} from '@prisma/client';
 import { AppService } from 'src/app.service';
 import { Client as LdapClient } from 'ldapts';
+import { AtualizarPermissoesDevDto } from './dto/atualizar-permissoes-dev.dto';
 import {
   BuscarNovoResponseDTO,
   UsuarioAutorizadoResponseDTO,
@@ -112,6 +119,9 @@ export class UsuariosService {
         permissao,
       },
     });
+
+    await this.sincronizarGrupoLegado(usuario.id);
+
     if (!usuario)
       throw new InternalServerErrorException(
         'Não foi possível criar o usuário, tente novamente.',
@@ -243,6 +253,9 @@ export class UsuariosService {
       },
       where: { id },
     });
+
+    await this.sincronizarGrupoLegado(id);
+
     return usuarioAtualizado;
   }
 
@@ -430,5 +443,137 @@ export class UsuariosService {
       where: { id },
       data: { ultimoLogin: new Date() },
     });
+  }
+
+  async listarPermissoesDev(
+    pagina: number = 1,
+    limite: number = 20,
+    busca?: string,
+    permissao?: string,
+    status?: string,
+  ): Promise<UsuarioPaginadoResponseDTO> {
+    [pagina, limite] = this.app.verificaPagina(pagina, limite);
+
+    const where = {
+      ...(busca && {
+        OR: [
+          { nome: { contains: busca } },
+          { login: { contains: busca } },
+          { email: { contains: busca } },
+        ],
+      }),
+      ...(permissao && permissao !== '' && { permissao: Permissao[permissao] }),
+      ...(status &&
+        status !== '' && {
+          status:
+            status === 'ATIVO'
+              ? true
+              : status === 'INATIVO'
+                ? false
+                : undefined,
+        }),
+    };
+
+    const total = await this.prisma.usuario.count({ where });
+
+    if (total === 0) {
+      return { total: 0, pagina: 0, limite: 0, data: [] };
+    }
+
+    [pagina, limite] = this.app.verificaLimite(pagina, limite, total);
+
+    const usuarios = await this.prisma.usuario.findMany({
+      where,
+      orderBy: { nome: 'asc' },
+      skip: (pagina - 1) * limite,
+      take: limite,
+      include: {
+        unidade: {
+          select: {
+            id: true,
+            nome: true,
+            sigla: true,
+          },
+        },
+      },
+    });
+
+    return {
+      total,
+      pagina,
+      limite,
+      data: usuarios,
+    };
+  }
+
+  async atualizarPermissoesDev(
+    id: string,
+    dto: AtualizarPermissoesDevDto,
+  ): Promise<UsuarioResponseDTO> {
+    const atual = await this.prisma.usuario.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+
+    if (!atual) {
+      throw new NotFoundException('Usuário não encontrado.');
+    }
+
+    const atualizado = await this.prisma.usuario.update({
+      where: { id },
+      data: {
+        ...(dto.permissao !== undefined ? { permissao: dto.permissao } : {}),
+        ...(dto.status !== undefined ? { status: dto.status } : {}),
+      },
+      include: {
+        unidade: {
+          select: {
+            id: true,
+            nome: true,
+            sigla: true,
+          },
+        },
+      },
+    });
+
+    await this.sincronizarGrupoLegado(id);
+
+    return atualizado;
+  }
+
+  private async sincronizarGrupoLegado(usuarioId: string) {
+    const usuario = await this.prisma.usuario.findUnique({
+      where: { id: usuarioId },
+      select: {
+        permissao: true,
+      },
+    });
+
+    if (!usuario) {
+      return;
+    }
+
+    if (usuario.permissao === 'DEV') {
+      await this.prisma.grupo.upsert({
+        where: {
+          codigo_tipo: {
+            codigo: GrupoCodigo.GLOBAL,
+            tipo: GrupoTipo.DIVISAO,
+          },
+        },
+        create: {
+          codigo: GrupoCodigo.GLOBAL,
+          tipo: GrupoTipo.DIVISAO,
+          nome: 'Contexto Global (DEV)',
+          ativo: true,
+        },
+        update: {
+          nome: 'Contexto Global (DEV)',
+          ativo: true,
+        },
+      });
+
+      return;
+    }
   }
 }

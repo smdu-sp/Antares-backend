@@ -26,6 +26,10 @@ Sistema de gerenciamento de processos e andamentos - SMUL/ATIC
 - **LDAP/AD** - Integração com Active Directory
 - **Swagger** - Documentação automática da API
 
+## 📚 Contratos de integração
+
+- Frontend (acesso por sistema + grupos): `docs/frontend-contrato-acesso-grupos.md`
+
 ## 📋 Pré-requisitos
 
 - Node.js 18+
@@ -100,6 +104,7 @@ npm run start:prod
 Acesse: [http://localhost:3000](http://localhost:3000)
 
 ## � Deploy para Produção
+
 **📖 Guia completo**: [DEPLOY.md](./DEPLOY.md)
 
 **⚡ Verificação rápida** - Execute antes do deploy:
@@ -112,9 +117,11 @@ Acesse: [http://localhost:3000](http://localhost:3000)
 chmod +x pre-deploy-check.sh
 ./pre-deploy-check.sh
 ```
+
 ### ✅ Checklist Pré-Deploy
 
 #### 1. Variáveis de Ambiente
+
 ```bash
 # ⚠️ IMPORTANTE: Gerar novos secrets para produção
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"  # JWT_SECRET
@@ -122,6 +129,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"  # RT_S
 ```
 
 Configure o `.env` de produção:
+
 ```env
 # Banco de dados
 DATABASE_URL=mysql://user:password@host:3306/antares
@@ -143,23 +151,27 @@ PASS_LDAP=senha_servico
 ```
 
 #### 2. Executar Migrations Pendentes
+
 ```bash
 # ⚠️ Backup do banco antes de rodar migrations!
 npx prisma migrate deploy --schema=./prisma/schema.prisma
 ```
 
 **Migrations recentes:**
+
 - ✅ `20260223155307_add_preferencias_usuario` - Sistema de preferências do usuário
 - ✅ `20260220155731_add_assunto_to_andamento` - Campo assunto em andamentos
 - ✅ Outras migrations anteriores (ver pasta `prisma/migrations/`)
 
 #### 3. Gerar Prisma Clients
+
 ```bash
 npx prisma generate --schema=./prisma/schema.prisma
 npx prisma generate --schema=./prisma/sgu/schema.prisma
 ```
 
 #### 4. Build da Aplicação
+
 ```bash
 # Instalar dependências (produção apenas)
 npm ci --production=false
@@ -174,6 +186,7 @@ npm run start:prod
 #### 5. Verificações Finais
 
 **Checklist:**
+
 - [ ] `.env` configurado com secrets novos
 - [ ] Migrations aplicadas com sucesso
 - [ ] Prisma clients gerados
@@ -200,6 +213,7 @@ curl http://localhost:3000/
 ### 📊 Novos Endpoints (Features Recentes)
 
 #### **Preferências de Usuário** (Persistência de configurações)
+
 ```bash
 POST   /preferencias           # Salvar preferência
 GET    /preferencias           # Listar todas
@@ -209,6 +223,7 @@ DELETE /preferencias           # Deletar todas
 ```
 
 #### **Exportação** (Excel/PDF)
+
 ```bash
 GET /export/processos/excel     # Exportar processos para Excel
 GET /export/processos/pdf       # Exportar processos para PDF
@@ -219,6 +234,7 @@ GET /export/andamentos/pdf      # Exportar andamentos para PDF
 #### **Contadores para Dashboard**
 
 **Processos:**
+
 ```bash
 GET /processos/contar/total           # Total de processos
 GET /processos/contar/em-andamento    # Em andamento (não concluídos, não atrasados)
@@ -228,6 +244,7 @@ GET /processos/contar/concluidos      # Concluídos (com data_resposta_final)
 ```
 
 **Andamentos:**
+
 ```bash
 GET /andamentos/contar/concluidos      # Status CONCLUIDO
 GET /andamentos/contar/vencidos        # Não concluídos, prazo vencido
