@@ -730,6 +730,7 @@ export class ProcessosService {
     atrasados: boolean = false,
     concluidos: boolean = false,
     usuario_id?: string,
+    unidade?: string,
   ): Promise<ProcessoPaginadoResponseDto> {
     // Valida e ajusta página e limite usando o AppService
     [pagina, limite] = this.app.verificaPagina(pagina, limite);
@@ -823,6 +824,38 @@ export class ProcessosService {
           { sigla: { contains: unidadeDestino } },
         ],
       };
+    }
+
+    // Filtro combinado por unidade (remetente OU destino)
+    if (unidade) {
+      const andAtual = Array.isArray(searchParams.AND)
+        ? [...searchParams.AND]
+        : searchParams.AND
+          ? [searchParams.AND]
+          : [];
+      searchParams.AND = [
+        ...andAtual,
+        {
+          OR: [
+            {
+              unidadeRemetente: {
+                OR: [
+                  { nome: { contains: unidade } },
+                  { sigla: { contains: unidade } },
+                ],
+              },
+            },
+            {
+              unidadeDestino: {
+                OR: [
+                  { nome: { contains: unidade } },
+                  { sigla: { contains: unidade } },
+                ],
+              },
+            },
+          ],
+        },
+      ];
     }
 
     // === ISSUE #24: FILTROS RÁPIDOS ===

@@ -73,6 +73,16 @@ export class BuscarProcessoDto {
 
   @ApiProperty({
     description:
+      'Busca combinada por unidade (remetente OU destino) — nome ou sigla',
+    required: false,
+    example: 'COINFRA',
+  })
+  @IsOptional()
+  @IsString()
+  unidade?: string;
+
+  @ApiProperty({
+    description:
       'Filtro: processos vencendo hoje (prazo ou prorrogação vence hoje)',
     required: false,
     default: false,

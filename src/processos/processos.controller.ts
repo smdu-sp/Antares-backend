@@ -132,6 +132,7 @@ export class ProcessosController {
       filtros.atrasados,
       filtros.concluidos,
       usuario?.id,
+      filtros.unidade,
     );
   }
 

@@ -10,7 +10,7 @@ model OrigemProcesso {
 // Model: Interessado | Tabela: interessados | Descrição: Armazena valores únicos de interessados digitados nos processos para autocomplete
 model Interessado {
   id     String  @id @default(uuid()) // ID único
-  valor  String  @unique // Nome do interessado digitado (texto livre, único)
+  valor  String  @db.VarChar(768) @unique // Nome do interessado digitado (texto livre, único) — 768 é o máximo para índice único com utf8mb4
   ativo  Boolean @default(true) // Indica se o interessado está ativo (true) ou foi excluído logicamente (false) - Boolean - Valor padrão: true
   criadoEm DateTime @default(now()) // Data/hora de criação
 
