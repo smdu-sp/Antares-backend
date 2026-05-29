@@ -7,7 +7,6 @@
 /prisma/seed.ts
 
 # Logs
-logs
 *.log
 npm-debug.log*
 pnpm-debug.log*
