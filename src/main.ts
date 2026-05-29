@@ -10,8 +10,8 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   // Parse do JSON/URL-encoded
-  app.use(json({ limit: '50mb' }));
-  app.use(urlencoded({ extended: true, limit: '50mb' }));
+  app.use(json({ limit: '250mb' }));
+  app.use(urlencoded({ extended: true, limit: '250mb' }));
 
   // ValidationPipe com configuração que preserva arrays
   app.useGlobalPipes(
@@ -22,19 +22,20 @@ async function bootstrap() {
     }),
   );
 
-  app.use((req, res, next) => {
+  app.use((_, res, next) => {
     res.json = (data) => {
       return res.send(stringify(data));
     };
     next();
   });
   const port = process.env.PORT || 3000;
-  app.enableCors({ origin: 'http://localhost:3001' });
+  const frontendPort = process.env.FRONTEND_PORT || 3001;
+  app.enableCors({ origin: `http://localhost:${frontendPort}` });
   const options = new DocumentBuilder()
     .addBearerAuth()
-    .setTitle('Atendimento ao Público - Agendamentos')
+    .setTitle('ANTARES - Backend')
     .setDescription(
-      'Backend em NestJS para aplicação de agendamento de Atendimentos ao Público.',
+      'Backend em NestJS para aplicação gestão de processos - ANTARES.',
     )
     .setVersion('versão 1.0')
     .build();
