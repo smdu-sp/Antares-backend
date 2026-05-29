@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { UsuarioPayload } from '../models/UsuarioPayload';
@@ -17,7 +17,7 @@ export class RtStrategy extends PassportStrategy(Strategy, 'jwt-refresh') {
 
   async validate(payload: UsuarioPayload) {
     const usuario = await this.usuariosService.buscarPorId(payload.sub);
-    if (!usuario) throw new Error('Usuário não encontrado');
+    if (!usuario) throw new UnauthorizedException('Usuário não encontrado');
     await this.usuariosService.atualizarUltimoLogin(payload.sub);
     return usuario;
   }
