@@ -328,6 +328,8 @@ export class AuthService {
   }
 
   async validateUser(login: string, senha: string) {
+    console.log(`[AUTH] Tentativa de login: "${login}"`);
+
     let usuario = await this.usuariosService.buscarPorLogin(login);
 
     // Verifica se o usuário existe no banco local
@@ -338,6 +340,8 @@ export class AuthService {
       );
     }
 
+    console.log(`[AUTH] Usuário encontrado no banco: id=${usuario.id}, status=${usuario.status}`);
+
     // Verifica se o usuário está ativo
     if (usuario.status === false) {
       console.error('❌ Usuário desativado:', login);
@@ -345,32 +349,32 @@ export class AuthService {
     }
 
     // Em ambiente local, pula a validação LDAP
-    const environment = process.env.ENVIRONMENT?.replace(
-      /"/g,
-      '',
-    ).toLowerCase();
+    const environment = process.env.ENVIRONMENT?.replace(/"/g, '').toLowerCase();
+    console.log(`[AUTH] Ambiente detectado: "${environment}"`);
 
     if (environment === 'local') {
+      console.log('[AUTH] Ambiente local — pulando validação LDAP');
       return usuario;
     }
 
     // Validação LDAP em ambiente de produção
+    const ldapServer = process.env.LDAP_SERVER?.replace(/"/g, '');
+    const ldapDomain = process.env.LDAP_DOMAIN?.replace(/"/g, '');
+    const ldapUser = `${login}${ldapDomain}`;
 
-    const client: LdapClient = new LdapClient({
-      url: process.env.LDAP_SERVER?.replace(/"/g, ''),
-    });
+    console.log(`[AUTH] Iniciando conexão LDAP — servidor: "${ldapServer}"`);
+    console.log(`[AUTH] Usuário LDAP: "${ldapUser}"`);
+
+    const client: LdapClient = new LdapClient({ url: ldapServer });
 
     try {
-      const ldapDomain = process.env.LDAP_DOMAIN?.replace(/"/g, '');
-      const ldapUser = `${login}${ldapDomain}`;
-
       await client.bind(ldapUser, senha);
-
+      console.log(`[AUTH] ✅ Bind LDAP bem-sucedido para: "${ldapUser}"`);
       await client.unbind();
-
       return usuario;
     } catch (error) {
-      console.error('❌ Erro na autenticação LDAP:', error.message);
+      console.error(`[AUTH] ❌ Falha no bind LDAP para "${ldapUser}": ${error.message}`);
+      console.error(`[AUTH] Código do erro LDAP:`, error.code ?? 'sem código');
       await client.unbind().catch(() => {});
       throw new UnauthorizedException('Credenciais LDAP incorretas.');
     }

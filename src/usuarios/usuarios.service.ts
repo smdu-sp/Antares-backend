@@ -206,7 +206,14 @@ export class UsuariosService {
   }
 
   async buscarPorLogin(login: string): Promise<UsuarioResponseDTO> {
-    return await this.prisma.usuario.findUnique({ where: { login } });
+    console.log(`[USUARIOS] buscarPorLogin: procurando login="${login}"`);
+    const usuario = await this.prisma.usuario.findUnique({ where: { login } });
+    if (!usuario) {
+      console.warn(`[USUARIOS] buscarPorLogin: nenhum usuário encontrado para login="${login}"`);
+    } else {
+      console.log(`[USUARIOS] buscarPorLogin: encontrado id=${usuario.id}, status=${usuario.status}`);
+    }
+    return usuario;
   }
 
   async atualizar(
