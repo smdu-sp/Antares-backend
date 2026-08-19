@@ -1,3 +1,11 @@
+> ⚠️ **REPOSITÓRIO ARQUIVADO — 2026-08-19**
+>
+> Este backend foi decomissionado. Toda a funcionalidade foi migrada para o
+> app fullstack Next.js em [`Antares-frontend`](https://github.com/smdu-sp/Antares-frontend)
+> — Route Handlers em `app/api/**` chamando Prisma diretamente, sem servidor
+> HTTP separado. Este repositório é mantido só como referência histórica:
+> não deve receber novas alterações nem ser reimplantado em produção.
+
 # Antares Backend
 
 Sistema de gerenciamento de processos e andamentos - SMUL/ATIC
